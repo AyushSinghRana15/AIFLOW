@@ -1,0 +1,37 @@
+{
+  "$comment": "Normative edge-type/node-type compatibility matrix for AIFLOW v1. JSON Schema cannot dereference node ids to their types, so this constraint is enforced at semantic-validation level (L2) rather than structural level (L1). Language SDKs and framework adapters should load this file rather than hardcoding the matrix.",
+  "version": "1.0",
+  "node_types": ["agent", "llm", "tool", "prompt", "retriever", "vector_store", "input", "output", "condition"],
+  "edges": {
+    "calls": {
+      "semantics": "Invokes the target, transferring control. The source waits for a result.",
+      "source": ["agent", "condition", "input"],
+      "target": ["agent", "llm", "tool"]
+    },
+    "uses": {
+      "semantics": "Declares a static dependency without transferring control. The target is consumed as configuration or capability.",
+      "source": ["agent", "llm", "tool", "retriever"],
+      "target": ["prompt", "tool", "vector_store"]
+    },
+    "retrieves": {
+      "semantics": "Performs a retrieval operation against a store or retriever.",
+      "source": ["agent", "llm", "retriever"],
+      "target": ["retriever", "vector_store"]
+    },
+    "passes": {
+      "semantics": "Moves data from a source output port to a target input port.",
+      "source": ["agent", "llm", "tool", "prompt", "retriever", "vector_store", "input", "condition"],
+      "target": ["agent", "llm", "tool", "prompt", "retriever", "vector_store", "output", "condition"]
+    },
+    "produces": {
+      "semantics": "Yields a terminal result of the workflow.",
+      "source": ["agent", "llm", "tool", "retriever", "condition"],
+      "target": ["output"]
+    },
+    "routes_to": {
+      "semantics": "Conditional branch. Must carry 'when', or be marked as the single 'default' branch.",
+      "source": ["condition"],
+      "target": ["agent", "llm", "tool", "retriever", "condition", "output"]
+    }
+  }
+}

@@ -1,0 +1,611 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aiflow.dev/spec/v1/aiflow.schema.json",
+  "title": "AIFLOW v1",
+  "description": "Semantic representation of an AI workflow. AIFLOW is not a diagram format; it is a machine-readable graph of components, relationships, data flow, behavior, and source-code provenance that CAN be rendered as a diagram.",
+  "type": "object",
+  "required": ["format", "version", "nodes", "edges"],
+  "additionalProperties": false,
+
+  "properties": {
+    "format": {
+      "const": "aiflow",
+      "description": "Format discriminator. Always the string 'aiflow'."
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+$",
+      "description": "Spec version this document conforms to. A v1 reader MUST accept any 1.x document and MUST ignore unknown properties inside 'extensions'."
+    },
+    "project": { "$ref": "#/$defs/project" },
+    "nodes": {
+      "type": "array",
+      "description": "Occurrences in the workflow graph. Node ids MUST be unique (checked at semantic level L2).",
+      "items": { "$ref": "#/$defs/node" }
+    },
+    "edges": {
+      "type": "array",
+      "description": "Typed semantic relationships between nodes.",
+      "items": { "$ref": "#/$defs/edge" }
+    },
+    "prompts": {
+      "type": "array",
+      "description": "Registry of reusable prompt definitions, referenced by nodes of type 'prompt'.",
+      "items": { "$ref": "#/$defs/prompt" }
+    },
+    "models": {
+      "type": "array",
+      "description": "Registry of model configurations, referenced by nodes of type 'llm'.",
+      "items": { "$ref": "#/$defs/model" }
+    },
+    "tools": {
+      "type": "array",
+      "description": "Registry of tool definitions, referenced by nodes of type 'tool'.",
+      "items": { "$ref": "#/$defs/tool" }
+    },
+    "data_sources": {
+      "type": "array",
+      "description": "Registry of data sources, referenced by nodes of type 'vector_store' and 'retriever'.",
+      "items": { "$ref": "#/$defs/data_source" }
+    },
+    "metadata": { "$ref": "#/$defs/metadata" },
+    "provenance": {
+      "$ref": "#/$defs/provenance",
+      "description": "Document-level provenance: how this .aiflow file as a whole was produced."
+    },
+    "extensions": { "$ref": "#/$defs/extensions" }
+  },
+
+  "$defs": {
+
+    "identifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,127}$",
+      "description": "Stable identifier. Must start with a letter; may contain letters, digits, underscore, dot, colon, hyphen. Max 128 chars."
+    },
+
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Identity of the AI project this workflow was extracted from.",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "version": { "type": "string" },
+        "repository": { "type": "string", "format": "uri" },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{7,40}$",
+          "description": "Git commit the workflow was extracted from. Enables git-aware diffing."
+        },
+        "root": {
+          "type": "string",
+          "description": "Repo-relative path that all source_ref.file paths are resolved against."
+        },
+        "languages": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "frameworks": {
+          "type": "array",
+          "description": "Frameworks detected in the project.",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "examples": ["langgraph", "langchain", "openai-agents", "crewai", "llamaindex", "custom"]
+              },
+              "version": { "type": "string" },
+              "adapter": {
+                "type": "string",
+                "description": "Identifier of the AIFLOW adapter that handled this framework."
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "source_ref": {
+      "type": "object",
+      "required": ["file"],
+      "additionalProperties": false,
+      "description": "A mapping back into source code. This is what makes code-to-workflow traceability possible.",
+      "properties": {
+        "file": {
+          "type": "string",
+          "description": "Path relative to project.root (or repo root if root is unset). MUST NOT be absolute."
+        },
+        "start_line": { "type": "integer", "minimum": 1 },
+        "end_line": { "type": "integer", "minimum": 1 },
+        "symbol": {
+          "type": "string",
+          "description": "Fully qualified symbol, e.g. 'app.agents.router.RouterAgent.decide'."
+        },
+        "language": { "type": "string" },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{7,40}$",
+          "description": "Commit this reference was resolved against. If absent, project.commit applies."
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Permalink to the source range (e.g. a GitHub blob URL pinned to a commit)."
+        }
+      }
+    },
+
+    "provenance": {
+      "type": "object",
+      "required": ["method"],
+      "additionalProperties": false,
+      "description": "How a piece of information in this document was obtained. Provenance is the primary defense against silently trusting AI-inferred structure.",
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": ["static_analysis", "framework_adapter", "runtime_trace", "ai_inference", "manual"],
+          "description": "static_analysis: derived from parsing code. framework_adapter: reported by a framework-specific extractor. runtime_trace: observed during execution. ai_inference: inferred by a model. manual: authored by a human."
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Confidence in this information. REQUIRED when method is 'ai_inference'."
+        },
+        "evidence": {
+          "type": "array",
+          "description": "Source locations that support this claim.",
+          "items": { "$ref": "#/$defs/source_ref" }
+        },
+        "generator": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string" },
+            "version": { "type": "string" },
+            "model": {
+              "type": "string",
+              "description": "Model id, when method is 'ai_inference'."
+            }
+          }
+        },
+        "generated_at": { "type": "string", "format": "date-time" },
+        "reviewed_by": {
+          "type": "string",
+          "description": "Set when a human has confirmed an inferred claim. Promotes trust without rewriting method."
+        },
+        "notes": { "type": "string" }
+      },
+      "allOf": [
+        {
+          "$comment": "AI-inferred information must carry a confidence score.",
+          "if": {
+            "properties": { "method": { "const": "ai_inference" } },
+            "required": ["method"]
+          },
+          "then": { "required": ["confidence"] }
+        }
+      ]
+    },
+
+    "port": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "description": "A named input or output slot on a node. Ports let 'passes' edges bind data flow precisely instead of node-to-node hand-waving.",
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "description": { "type": "string" },
+        "type": {
+          "type": "string",
+          "description": "Informal type label, e.g. 'string', 'Document[]', 'ChatState'."
+        },
+        "schema": {
+          "type": "object",
+          "description": "Optional JSON Schema describing the payload on this port."
+        },
+        "required": { "type": "boolean", "default": true }
+      }
+    },
+
+    "ai_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Natural-language semantics attached to a node or edge. This is the layer that answers questions like 'what happens if the vector DB fails?' without re-reading the code.",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "One-line description of what this component does."
+        },
+        "intent": {
+          "type": "string",
+          "description": "Why this component exists in the workflow."
+        },
+        "failure_modes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["description"],
+            "additionalProperties": false,
+            "properties": {
+              "description": { "type": "string" },
+              "handled": {
+                "type": "boolean",
+                "description": "Whether the code demonstrably handles this failure. Drives 'find missing error handling'."
+              },
+              "handler_node": { "$ref": "#/$defs/identifier" },
+              "source": { "$ref": "#/$defs/source_ref" }
+            }
+          }
+        },
+        "invariants": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Conditions expected to hold whenever this component runs."
+        },
+        "side_effects": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Observable effects outside the workflow (writes, network calls, spend)."
+        },
+        "notes": { "type": "string" }
+      }
+    },
+
+    "extensions": {
+      "type": "object",
+      "description": "Framework- or vendor-specific data. AIFLOW is strict everywhere else so typos surface as validation errors; this object is the sanctioned escape hatch. Readers MUST ignore keys they do not understand.",
+      "additionalProperties": true
+    },
+
+    "node": {
+      "type": "object",
+      "required": ["id", "type"],
+      "additionalProperties": false,
+      "description": "An occurrence of a component in the workflow graph. Reusable definitions live in the registries (prompts/models/tools/data_sources); a node points at one via 'ref'.",
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "type": {
+          "type": "string",
+          "enum": ["agent", "llm", "tool", "prompt", "retriever", "vector_store", "input", "output", "condition"]
+        },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "ref": {
+          "$ref": "#/$defs/identifier",
+          "description": "Id of the registry entry backing this node. Which registry is determined by 'type': llm -> models, tool -> tools, prompt -> prompts, vector_store/retriever -> data_sources."
+        },
+        "config": {
+          "type": "object",
+          "description": "Node-local configuration that overrides or supplements the referenced registry entry.",
+          "additionalProperties": true
+        },
+        "inputs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/port" }
+        },
+        "outputs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/port" }
+        },
+        "depends_on": {
+          "type": "array",
+          "description": "Ids of nodes that must have run before this one, where that ordering is not already implied by an edge.",
+          "items": { "$ref": "#/$defs/identifier" }
+        },
+        "source": {
+          "type": "array",
+          "description": "Where this node lives in code. Multiple refs are allowed (e.g. definition plus registration site).",
+          "items": { "$ref": "#/$defs/source_ref" }
+        },
+        "ai_context": { "$ref": "#/$defs/ai_context" },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      },
+
+      "allOf": [
+        {
+          "$comment": "Nodes that are pure graph positions cannot reference a registry entry.",
+          "if": {
+            "properties": { "type": { "enum": ["input", "output", "condition", "agent"] } },
+            "required": ["type"]
+          },
+          "then": { "properties": { "ref": false } }
+        },
+        {
+          "$comment": "Nodes that are occurrences of a reusable definition must say which one.",
+          "if": {
+            "properties": { "type": { "enum": ["llm", "tool", "prompt", "vector_store"] } },
+            "required": ["type"]
+          },
+          "then": { "required": ["ref"] }
+        }
+      ]
+    },
+
+    "edge": {
+      "type": "object",
+      "required": ["id", "type", "source", "target"],
+      "additionalProperties": false,
+      "description": "A typed semantic relationship. Edge type carries meaning: 'calls' transfers control, 'uses' declares a dependency, 'passes' moves data.",
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "type": {
+          "type": "string",
+          "enum": ["calls", "uses", "retrieves", "passes", "produces", "routes_to"],
+          "description": "calls: invokes, transferring control. uses: depends on without transferring control. retrieves: performs a retrieval against a store. passes: moves data from an output port to an input port. produces: yields a terminal result. routes_to: conditional branch."
+        },
+        "source": { "$ref": "#/$defs/identifier" },
+        "target": { "$ref": "#/$defs/identifier" },
+        "source_port": {
+          "$ref": "#/$defs/identifier",
+          "description": "Name of a port in source node's 'outputs'."
+        },
+        "target_port": {
+          "$ref": "#/$defs/identifier",
+          "description": "Name of a port in target node's 'inputs'."
+        },
+        "label": { "type": "string" },
+        "when": {
+          "type": "string",
+          "description": "Branch predicate, for 'routes_to' edges. Human-readable or a code expression."
+        },
+        "default": {
+          "type": "boolean",
+          "description": "Marks the fallback branch of a condition. At most one per condition node (L2)."
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "What travels along this edge.",
+          "properties": {
+            "type": { "type": "string" },
+            "schema": { "type": "object" },
+            "description": { "type": "string" }
+          }
+        },
+        "optional": {
+          "type": "boolean",
+          "default": false,
+          "description": "True when this relationship only occurs on some executions."
+        },
+        "source_ref": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/source_ref" }
+        },
+        "ai_context": { "$ref": "#/$defs/ai_context" },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      },
+
+      "allOf": [
+        {
+          "$comment": "A conditional branch must state its predicate or declare itself the fallback.",
+          "if": {
+            "properties": { "type": { "const": "routes_to" } },
+            "required": ["type"]
+          },
+          "then": {
+            "anyOf": [
+              { "required": ["when"] },
+              {
+                "properties": { "default": { "const": true } },
+                "required": ["default"]
+              }
+            ]
+          }
+        }
+      ]
+    },
+
+    "prompt": {
+      "type": "object",
+      "required": ["id"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "role": {
+          "type": "string",
+          "enum": ["system", "user", "assistant", "tool", "developer", "composite"]
+        },
+        "template": {
+          "type": "string",
+          "description": "The prompt text, with variable placeholders intact."
+        },
+        "template_format": {
+          "type": "string",
+          "enum": ["f-string", "jinja2", "mustache", "literal", "other"],
+          "default": "literal"
+        },
+        "variables": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "description": { "type": "string" },
+              "required": { "type": "boolean", "default": true },
+              "source_node": {
+                "$ref": "#/$defs/identifier",
+                "description": "Node whose output fills this variable, when known."
+              }
+            }
+          }
+        },
+        "source": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/source_ref" }
+        },
+        "ai_context": { "$ref": "#/$defs/ai_context" },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+
+    "model": {
+      "type": "object",
+      "required": ["id", "provider", "model"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "provider": {
+          "type": "string",
+          "examples": ["anthropic", "openai", "google", "bedrock", "azure", "ollama", "local"]
+        },
+        "model": {
+          "type": "string",
+          "description": "Provider model identifier, e.g. 'claude-sonnet-4-5'."
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "temperature": { "type": "number" },
+            "max_tokens": { "type": "integer", "minimum": 1 },
+            "top_p": { "type": "number" },
+            "stop": { "type": "array", "items": { "type": "string" } },
+            "streaming": { "type": "boolean" }
+          }
+        },
+        "structured_output": {
+          "type": "object",
+          "description": "JSON Schema the model is constrained to emit, if any.",
+          "additionalProperties": true
+        },
+        "source": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/source_ref" }
+        },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+
+    "tool": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "name": {
+          "type": "string",
+          "description": "Name the model sees when selecting this tool."
+        },
+        "description": { "type": "string" },
+        "kind": {
+          "type": "string",
+          "enum": ["function", "http_api", "mcp", "retrieval", "code_execution", "human_in_the_loop", "other"],
+          "default": "function"
+        },
+        "parameters": {
+          "type": "object",
+          "description": "JSON Schema of the tool's arguments.",
+          "additionalProperties": true
+        },
+        "returns": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": { "type": "string" },
+            "schema": { "type": "object" },
+            "description": { "type": "string" }
+          }
+        },
+        "side_effects": {
+          "type": "boolean",
+          "description": "True when invoking this tool mutates state outside the workflow. Drives safety review."
+        },
+        "idempotent": { "type": "boolean" },
+        "source": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/source_ref" }
+        },
+        "ai_context": { "$ref": "#/$defs/ai_context" },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+
+    "data_source": {
+      "type": "object",
+      "required": ["id", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "kind": {
+          "type": "string",
+          "enum": ["vector_store", "document_store", "sql", "graph", "key_value", "api", "file", "other"]
+        },
+        "provider": {
+          "type": "string",
+          "examples": ["pinecone", "chroma", "weaviate", "pgvector", "qdrant", "elasticsearch", "postgres"]
+        },
+        "config": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "index": { "type": "string" },
+            "namespace": { "type": "string" },
+            "embedding_model": { "type": "string" },
+            "dimensions": { "type": "integer", "minimum": 1 },
+            "metric": {
+              "type": "string",
+              "enum": ["cosine", "euclidean", "dotproduct", "other"]
+            }
+          }
+        },
+        "source": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/source_ref" }
+        },
+        "ai_context": { "$ref": "#/$defs/ai_context" },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Document-level bookkeeping. Deliberately open so tools can annotate freely.",
+      "properties": {
+        "generated_at": { "type": "string", "format": "date-time" },
+        "generator": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "name": { "type": "string" },
+            "version": { "type": "string" }
+          }
+        },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "stats": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Cached counts. Advisory only; readers MUST NOT trust these over the actual arrays."
+        },
+        "layout": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Optional visual hints. The semantic model is authoritative; layout is presentation and MAY be discarded."
+        }
+      }
+    }
+  }
+}

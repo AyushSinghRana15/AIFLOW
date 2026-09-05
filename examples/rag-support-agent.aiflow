@@ -1,0 +1,372 @@
+{
+  "format": "aiflow",
+  "version": "1.0",
+
+  "project": {
+    "name": "acme-support-agent",
+    "description": "Customer support agent that routes between knowledge-base RAG and a ticket lookup tool.",
+    "version": "0.4.1",
+    "repository": "https://github.com/acme/support-agent",
+    "commit": "9f3c1ab",
+    "root": "src",
+    "languages": ["python"],
+    "frameworks": [
+      { "name": "langgraph", "version": "0.2.28", "adapter": "aiflow-adapter-langgraph@0.1.0" }
+    ]
+  },
+
+  "nodes": [
+    {
+      "id": "in_user_query",
+      "type": "input",
+      "name": "User query",
+      "outputs": [
+        { "name": "text", "type": "string", "description": "Raw customer message." },
+        { "name": "session_id", "type": "string", "required": false }
+      ],
+      "source": [{ "file": "graph/entry.py", "start_line": 18, "end_line": 24, "symbol": "graph.entry.build_initial_state" }],
+      "provenance": { "method": "framework_adapter", "generator": { "name": "aiflow-adapter-langgraph", "version": "0.1.0" } }
+    },
+
+    {
+      "id": "agent_supervisor",
+      "type": "agent",
+      "name": "Supervisor",
+      "description": "Decides whether the query needs knowledge-base retrieval, a ticket lookup, or a direct answer.",
+      "inputs": [{ "name": "text", "type": "string" }],
+      "outputs": [{ "name": "decision", "type": "RouteDecision" }],
+      "source": [{ "file": "agents/supervisor.py", "start_line": 31, "end_line": 96, "symbol": "agents.supervisor.SupervisorAgent" }],
+      "ai_context": {
+        "summary": "Classifies the incoming query into one of three handling strategies.",
+        "intent": "Avoid paying retrieval cost on queries that do not need grounding.",
+        "failure_modes": [
+          { "description": "Router LLM returns a label outside the allowed enum.", "handled": true, "handler_node": "cond_route", "source": { "file": "agents/supervisor.py", "start_line": 88, "end_line": 96 } },
+          { "description": "Router LLM times out; no fallback route is configured.", "handled": false }
+        ],
+        "side_effects": ["Emits a routing metric to StatsD."]
+      },
+      "provenance": { "method": "static_analysis", "confidence": 0.95, "evidence": [{ "file": "agents/supervisor.py", "start_line": 31 }] }
+    },
+
+    {
+      "id": "prompt_router",
+      "type": "prompt",
+      "ref": "p_router",
+      "name": "Routing prompt",
+      "source": [{ "file": "prompts/router.py", "start_line": 3, "end_line": 21 }],
+      "provenance": { "method": "static_analysis", "confidence": 1.0 }
+    },
+
+    {
+      "id": "llm_router",
+      "type": "llm",
+      "ref": "m_haiku",
+      "name": "Router model call",
+      "inputs": [{ "name": "prompt", "type": "string" }],
+      "outputs": [{ "name": "route", "type": "RouteDecision" }],
+      "source": [{ "file": "agents/supervisor.py", "start_line": 62, "end_line": 74, "symbol": "agents.supervisor.SupervisorAgent.decide" }],
+      "provenance": { "method": "static_analysis", "confidence": 0.98 }
+    },
+
+    {
+      "id": "cond_route",
+      "type": "condition",
+      "name": "Route decision",
+      "config": { "expression": "state['route']" },
+      "inputs": [{ "name": "route", "type": "RouteDecision" }],
+      "source": [{ "file": "graph/build.py", "start_line": 44, "end_line": 58, "symbol": "graph.build.add_conditional_edges" }],
+      "ai_context": { "summary": "Three-way branch on the router's label, with a direct-answer fallback." },
+      "provenance": { "method": "framework_adapter", "generator": { "name": "aiflow-adapter-langgraph", "version": "0.1.0" } }
+    },
+
+    {
+      "id": "retr_kb",
+      "type": "retriever",
+      "name": "Knowledge-base retriever",
+      "config": { "top_k": 6, "score_threshold": 0.72, "rerank": true },
+      "inputs": [{ "name": "query", "type": "string" }],
+      "outputs": [{ "name": "documents", "type": "Document[]" }],
+      "source": [{ "file": "rag/retriever.py", "start_line": 12, "end_line": 58, "symbol": "rag.retriever.KBRetriever.retrieve" }],
+      "ai_context": {
+        "summary": "Embeds the query and pulls the top-k support articles.",
+        "failure_modes": [
+          { "description": "Vector store unreachable; the call raises and the graph aborts without a degraded path.", "handled": false }
+        ],
+        "invariants": ["Returns at most top_k documents, all above score_threshold."]
+      },
+      "provenance": { "method": "static_analysis", "confidence": 0.93 }
+    },
+
+    {
+      "id": "vs_kb",
+      "type": "vector_store",
+      "ref": "ds_pinecone_kb",
+      "name": "Support KB index",
+      "source": [{ "file": "rag/stores.py", "start_line": 9, "end_line": 27 }],
+      "provenance": { "method": "static_analysis", "confidence": 1.0 }
+    },
+
+    {
+      "id": "tool_ticket_lookup",
+      "type": "tool",
+      "ref": "t_ticket_lookup",
+      "name": "Ticket lookup",
+      "inputs": [{ "name": "ticket_id", "type": "string" }],
+      "outputs": [{ "name": "ticket", "type": "Ticket" }],
+      "source": [{ "file": "tools/tickets.py", "start_line": 20, "end_line": 61, "symbol": "tools.tickets.lookup_ticket" }],
+      "provenance": { "method": "static_analysis", "confidence": 0.97 }
+    },
+
+    {
+      "id": "agent_answerer",
+      "type": "agent",
+      "name": "Answerer",
+      "description": "Composes the final grounded reply.",
+      "inputs": [
+        { "name": "query", "type": "string" },
+        { "name": "context", "type": "Document[]", "required": false },
+        { "name": "ticket", "type": "Ticket", "required": false }
+      ],
+      "outputs": [{ "name": "answer", "type": "string" }],
+      "source": [{ "file": "agents/answerer.py", "start_line": 14, "end_line": 88, "symbol": "agents.answerer.AnswererAgent" }],
+      "ai_context": {
+        "summary": "Synthesizes an answer from whatever context the chosen branch supplied.",
+        "invariants": ["Every factual claim must cite a retrieved document id."]
+      },
+      "provenance": { "method": "static_analysis", "confidence": 0.94 }
+    },
+
+    {
+      "id": "prompt_answer",
+      "type": "prompt",
+      "ref": "p_answer",
+      "name": "Answer synthesis prompt",
+      "source": [{ "file": "prompts/answer.py", "start_line": 1, "end_line": 40 }],
+      "provenance": { "method": "static_analysis", "confidence": 1.0 }
+    },
+
+    {
+      "id": "llm_answer",
+      "type": "llm",
+      "ref": "m_sonnet",
+      "name": "Answer model call",
+      "inputs": [{ "name": "prompt", "type": "string" }],
+      "outputs": [{ "name": "completion", "type": "string" }],
+      "source": [{ "file": "agents/answerer.py", "start_line": 63, "end_line": 79 }],
+      "provenance": { "method": "static_analysis", "confidence": 0.98 }
+    },
+
+    {
+      "id": "out_response",
+      "type": "output",
+      "name": "Support reply",
+      "inputs": [{ "name": "answer", "type": "string" }],
+      "source": [{ "file": "graph/entry.py", "start_line": 71, "end_line": 78 }],
+      "provenance": { "method": "framework_adapter", "generator": { "name": "aiflow-adapter-langgraph", "version": "0.1.0" } }
+    }
+  ],
+
+  "edges": [
+    {
+      "id": "e_query_to_supervisor",
+      "type": "passes",
+      "source": "in_user_query", "target": "agent_supervisor",
+      "source_port": "text", "target_port": "text",
+      "payload": { "type": "string", "description": "Raw customer message." },
+      "provenance": { "method": "framework_adapter" }
+    },
+    {
+      "id": "e_supervisor_uses_router_prompt",
+      "type": "uses",
+      "source": "agent_supervisor", "target": "prompt_router",
+      "provenance": { "method": "static_analysis", "confidence": 0.99 }
+    },
+    {
+      "id": "e_supervisor_calls_router_llm",
+      "type": "calls",
+      "source": "agent_supervisor", "target": "llm_router",
+      "provenance": { "method": "static_analysis", "confidence": 0.99 }
+    },
+    {
+      "id": "e_router_to_condition",
+      "type": "passes",
+      "source": "llm_router", "target": "cond_route",
+      "source_port": "route", "target_port": "route",
+      "provenance": { "method": "framework_adapter" }
+    },
+    {
+      "id": "e_route_kb",
+      "type": "routes_to",
+      "source": "cond_route", "target": "retr_kb",
+      "when": "route == 'knowledge_base'",
+      "label": "needs grounding",
+      "provenance": { "method": "framework_adapter" }
+    },
+    {
+      "id": "e_route_ticket",
+      "type": "routes_to",
+      "source": "cond_route", "target": "tool_ticket_lookup",
+      "when": "route == 'ticket'",
+      "label": "ticket status question",
+      "provenance": { "method": "framework_adapter" }
+    },
+    {
+      "id": "e_route_direct",
+      "type": "routes_to",
+      "source": "cond_route", "target": "agent_answerer",
+      "default": true,
+      "label": "answer directly",
+      "provenance": { "method": "framework_adapter" }
+    },
+    {
+      "id": "e_retriever_hits_store",
+      "type": "retrieves",
+      "source": "retr_kb", "target": "vs_kb",
+      "payload": { "type": "Document[]", "description": "Top-k support articles above the score threshold." },
+      "ai_context": { "summary": "Cosine similarity search over the support KB namespace." },
+      "provenance": { "method": "static_analysis", "confidence": 0.96 }
+    },
+    {
+      "id": "e_docs_to_answerer",
+      "type": "passes",
+      "source": "retr_kb", "target": "agent_answerer",
+      "source_port": "documents", "target_port": "context",
+      "provenance": { "method": "static_analysis", "confidence": 0.9 }
+    },
+    {
+      "id": "e_ticket_to_answerer",
+      "type": "passes",
+      "source": "tool_ticket_lookup", "target": "agent_answerer",
+      "source_port": "ticket", "target_port": "ticket",
+      "optional": true,
+      "provenance": {
+        "method": "ai_inference",
+        "confidence": 0.71,
+        "generator": { "name": "aiflow-semantic-analyzer", "version": "0.1.0", "model": "claude-sonnet-4-5" },
+        "notes": "The ticket payload is merged into shared graph state rather than passed explicitly; this edge is inferred from downstream state reads.",
+        "evidence": [{ "file": "agents/answerer.py", "start_line": 41, "end_line": 47 }]
+      }
+    },
+    {
+      "id": "e_answerer_uses_prompt",
+      "type": "uses",
+      "source": "agent_answerer", "target": "prompt_answer",
+      "provenance": { "method": "static_analysis", "confidence": 0.99 }
+    },
+    {
+      "id": "e_answerer_calls_llm",
+      "type": "calls",
+      "source": "agent_answerer", "target": "llm_answer",
+      "provenance": { "method": "static_analysis", "confidence": 0.99 }
+    },
+    {
+      "id": "e_answer_produces_response",
+      "type": "produces",
+      "source": "llm_answer", "target": "out_response",
+      "source_port": "completion", "target_port": "answer",
+      "provenance": { "method": "static_analysis", "confidence": 0.97 }
+    }
+  ],
+
+  "prompts": [
+    {
+      "id": "p_router",
+      "name": "Router",
+      "role": "system",
+      "template_format": "f-string",
+      "template": "Classify the support query into exactly one of: knowledge_base, ticket, direct.\n\nQuery: {query}\n\nRespond with only the label.",
+      "variables": [{ "name": "query", "source_node": "in_user_query" }],
+      "source": [{ "file": "prompts/router.py", "start_line": 3, "end_line": 21 }],
+      "provenance": { "method": "static_analysis", "confidence": 1.0 }
+    },
+    {
+      "id": "p_answer",
+      "name": "Answer synthesis",
+      "role": "system",
+      "template_format": "jinja2",
+      "template": "You are an Acme support agent.\n{% if context %}Use only these documents:\n{{ context }}\n{% endif %}Answer the customer's question and cite document ids.",
+      "variables": [
+        { "name": "context", "required": false, "source_node": "retr_kb" }
+      ],
+      "source": [{ "file": "prompts/answer.py", "start_line": 1, "end_line": 40 }],
+      "provenance": { "method": "static_analysis", "confidence": 1.0 }
+    }
+  ],
+
+  "models": [
+    {
+      "id": "m_haiku",
+      "provider": "anthropic",
+      "model": "claude-haiku-4-5-20251001",
+      "parameters": { "temperature": 0, "max_tokens": 16 },
+      "structured_output": { "type": "string", "enum": ["knowledge_base", "ticket", "direct"] },
+      "source": [{ "file": "config/models.py", "start_line": 8, "end_line": 14 }],
+      "provenance": { "method": "static_analysis", "confidence": 1.0 }
+    },
+    {
+      "id": "m_sonnet",
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-5",
+      "parameters": { "temperature": 0.2, "max_tokens": 1024, "streaming": true },
+      "source": [{ "file": "config/models.py", "start_line": 16, "end_line": 23 }],
+      "provenance": { "method": "static_analysis", "confidence": 1.0 }
+    }
+  ],
+
+  "tools": [
+    {
+      "id": "t_ticket_lookup",
+      "name": "lookup_ticket",
+      "description": "Fetch the status and history of a support ticket by id.",
+      "kind": "http_api",
+      "parameters": {
+        "type": "object",
+        "properties": { "ticket_id": { "type": "string", "pattern": "^ACM-[0-9]{5}$" } },
+        "required": ["ticket_id"]
+      },
+      "returns": { "type": "Ticket", "description": "Status, assignee, and last three updates." },
+      "side_effects": false,
+      "idempotent": true,
+      "source": [{ "file": "tools/tickets.py", "start_line": 20, "end_line": 61 }],
+      "ai_context": {
+        "failure_modes": [
+          { "description": "Ticket API returns 404 for unknown ids.", "handled": true, "source": { "file": "tools/tickets.py", "start_line": 52, "end_line": 57 } }
+        ]
+      },
+      "provenance": { "method": "static_analysis", "confidence": 0.97 }
+    }
+  ],
+
+  "data_sources": [
+    {
+      "id": "ds_pinecone_kb",
+      "name": "Support knowledge base",
+      "kind": "vector_store",
+      "provider": "pinecone",
+      "config": {
+        "index": "acme-support",
+        "namespace": "kb-v3",
+        "embedding_model": "text-embedding-3-large",
+        "dimensions": 3072,
+        "metric": "cosine"
+      },
+      "source": [{ "file": "rag/stores.py", "start_line": 9, "end_line": 27 }],
+      "ai_context": { "notes": "Reindexed nightly; staleness up to 24h is expected." },
+      "provenance": { "method": "static_analysis", "confidence": 1.0 }
+    }
+  ],
+
+  "metadata": {
+    "title": "Acme support agent workflow",
+    "generated_at": "2026-09-05T09:14:00Z",
+    "generator": { "name": "aiflow", "version": "0.1.0" },
+    "tags": ["rag", "routing", "support"]
+  },
+
+  "provenance": {
+    "method": "framework_adapter",
+    "generator": { "name": "aiflow", "version": "0.1.0" },
+    "generated_at": "2026-09-05T09:14:00Z",
+    "notes": "Structure extracted by the LangGraph adapter; two relationships supplemented by the semantic analyzer."
+  }
+}
