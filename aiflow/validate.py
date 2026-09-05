@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """AIFLOW v1 validator.
 
+
 Two levels:
   L1 structural  -- JSON Schema (spec/aiflow-v1.schema.json)
   L2 semantic    -- referential integrity, edge/node type compatibility,
@@ -11,24 +12,12 @@ cross-reference rule lives in L2.
 """
 from __future__ import annotations
 
-import argparse
 import json
-import sys
 from collections import defaultdict
 from pathlib import Path
 
-SPEC_DIR = Path(__file__).resolve().parent.parent / "spec"
-SCHEMA_PATH = SPEC_DIR / "aiflow-v1.schema.json"
-MATRIX_PATH = SPEC_DIR / "edge-compatibility.json"
-
-# node type -> registry key its `ref` must resolve against
-REF_REGISTRY = {
-    "llm": "models",
-    "tool": "tools",
-    "prompt": "prompts",
-    "vector_store": "data_sources",
-    "retriever": "data_sources",
-}
+from . import spec as _spec
+from .spec import REF_REGISTRY, REGISTRY_KEYS
 
 LOW_CONFIDENCE = 0.60
 
@@ -79,7 +68,7 @@ def validate_structural(doc, report) -> bool:
         report.warn("AF001", "$", "jsonschema not installed; L1 structural validation skipped.")
         return True
 
-    schema = json.loads(SCHEMA_PATH.read_text())
+    schema = _spec.schema()
     validator = jsonschema.Draft202012Validator(schema)
     ok = True
     for err in sorted(validator.iter_errors(doc), key=lambda e: list(e.absolute_path)):
@@ -94,7 +83,7 @@ def validate_structural(doc, report) -> bool:
 # L2: semantic
 # --------------------------------------------------------------------------
 def validate_semantic(doc, report):
-    matrix = json.loads(MATRIX_PATH.read_text())["edges"]
+    matrix = _spec.edge_rules()
 
     nodes = doc.get("nodes", [])
     edges = doc.get("edges", [])
@@ -116,7 +105,7 @@ def validate_semantic(doc, report):
         seen_edge_ids.add(eid)
 
     registries: dict[str, dict[str, dict]] = {}
-    for key in ("prompts", "models", "tools", "data_sources"):
+    for key in REGISTRY_KEYS:
         reg: dict[str, dict] = {}
         for i, item in enumerate(doc.get(key, [])):
             rid = item.get("id")
@@ -257,7 +246,7 @@ def validate_semantic(doc, report):
         check_prov(n.get("provenance"), f"$['nodes'][{i}]['provenance']")
     for i, e in enumerate(edges):
         check_prov(e.get("provenance"), f"$['edges'][{i}]['provenance']")
-    for key in ("prompts", "models", "tools", "data_sources"):
+    for key in REGISTRY_KEYS:
         for i, item in enumerate(doc.get(key, [])):
             check_prov(item.get("provenance"), f"$['{key}'][{i}]['provenance']")
 
@@ -271,41 +260,6 @@ def validate(doc) -> Report:
                     "L2 semantic validation skipped: document is not structurally valid.")
     return report
 
-
-def main():
-    ap = argparse.ArgumentParser(description="Validate a .aiflow document.")
-    ap.add_argument("files", nargs="+", type=Path)
-    ap.add_argument("--strict", action="store_true", help="Treat warnings as errors.")
-    ap.add_argument("--json", action="store_true", dest="as_json", help="Emit findings as JSON.")
-    args = ap.parse_args()
-
-    exit_code = 0
-    for path in args.files:
-        try:
-            doc = json.loads(path.read_text())
-        except json.JSONDecodeError as exc:
-            print(f"{path}: not valid JSON: {exc}", file=sys.stderr)
-            exit_code = 1
-            continue
-
-        report = validate(doc)
-        failed = bool(report.errors) or (args.strict and bool(report.warnings))
-
-        if args.as_json:
-            print(json.dumps({"file": str(path), "ok": not failed,
-                              "findings": [f.as_dict() for f in report.findings]}, indent=2))
-        else:
-            status = "FAIL" if failed else "OK"
-            print(f"\n{path}  [{status}]  "
-                  f"{len(report.errors)} error(s), {len(report.warnings)} warning(s)")
-            for f in report.findings:
-                print(f"  {f}")
-
-        if failed:
-            exit_code = 1
-
-    return exit_code
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+def validate_file(path) -> Report:
+    """Validate a document on disk. Raises json.JSONDecodeError on bad JSON."""
+    return validate(json.loads(Path(path).read_text()))

@@ -24,22 +24,50 @@ jobs:
       - name: Install
         run: python -m pip install --upgrade pip jsonschema
 
-      - name: Schema and matrix are well-formed JSON
+      - name: Spec artifacts are well-formed JSON
         run: |
           python -c "import json; json.load(open('spec/aiflow-v1.schema.json'))"
           python -c "import json; json.load(open('spec/edge-compatibility.json'))"
 
-      - name: Schema is a valid JSON Schema
+      - name: Schema is itself a valid draft 2020-12 schema
         run: |
           python - <<'PY'
           import json, jsonschema
-          schema = json.load(open("spec/aiflow-v1.schema.json"))
-          jsonschema.Draft202012Validator.check_schema(schema)
+          jsonschema.Draft202012Validator.check_schema(
+              json.load(open("spec/aiflow-v1.schema.json")))
           print("schema is a valid draft 2020-12 schema")
           PY
 
-      - name: Validate reference example
-        run: python tools/validate.py examples/rag-support-agent.aiflow --strict
+      - name: Reference example validates strictly
+        run: python -m aiflow.cli validate examples/rag-support-agent.aiflow --strict
 
-      - name: Conformance suite
-        run: python tests/test_matrix.py
+      - name: Conformance suites
+        run: python tests/run_all.py
+
+  package:
+    name: build and install
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --wheel
+
+      # The spec artifacts live once, at the repo root, and are force-included
+      # into the wheel. If that wiring breaks, an installed package silently
+      # loses its schema -- so install somewhere the checkout is not reachable.
+      - name: Install and run outside the checkout
+        run: |
+          python -m pip install dist/*.whl
+          cd /tmp
+          python -c "import aiflow; assert aiflow.schema()['title'] == 'AIFLOW v1'; print('packaged spec resolves')"
+          aiflow --version
+          aiflow init -o /tmp/demo.aiflow --name demo
+          aiflow validate /tmp/demo.aiflow --strict
+          aiflow inspect /tmp/demo.aiflow --json > /dev/null

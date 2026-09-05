@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aiflow-format"
+version = "0.1.0"
+description = "A framework-independent semantic representation of AI workflows"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Ayush Singh" }]
+keywords = ["ai", "workflow", "llm", "agents", "rag", "specification", "graph"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Libraries",
+]
+dependencies = ["jsonschema>=4.18"]
+
+[project.urls]
+Homepage = "https://github.com/AyushSinghRana15/AIFLOW"
+Specification = "https://github.com/AyushSinghRana15/AIFLOW/blob/main/spec/SPEC.md"
+
+[project.scripts]
+aiflow = "aiflow.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["aiflow"]
+
+# The spec artifacts are normative and live once, at the repo root. They are
+# copied into the wheel so an installed package resolves them without a checkout.
+[tool.hatch.build.targets.wheel.force-include]
+"spec/aiflow-v1.schema.json" = "aiflow/_spec/aiflow-v1.schema.json"
+"spec/edge-compatibility.json" = "aiflow/_spec/edge-compatibility.json"
+
+[tool.hatch.build.targets.sdist]
+include = ["aiflow", "spec", "examples", "tests", "README.md", "LICENSE"]

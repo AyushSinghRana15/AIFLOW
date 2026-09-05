@@ -110,7 +110,7 @@ JSON Schema cannot dereference an id to its node type, so validation is two-tier
 | Level | Scope | Implemented by |
 |---|---|---|
 | **L1 structural** | Shape, types, enums, required fields, conditional requirements | `aiflow-v1.schema.json` |
-| **L2 semantic** | Referential integrity, edge compatibility, port bindings, reachability, provenance discipline | `tools/validate.py` |
+| **L2 semantic** | Referential integrity, edge compatibility, port bindings, reachability, provenance discipline | `aiflow/validate.py` |
 
 A document is **conformant** only when it passes both.
 

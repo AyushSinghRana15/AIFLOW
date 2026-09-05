@@ -18,13 +18,13 @@ from itertools import product
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(ROOT))
 
-from validate import validate  # noqa: E402
+from aiflow import spec  # noqa: E402
+from aiflow.validate import validate  # noqa: E402
 
-MATRIX = json.loads((ROOT / "spec" / "edge-compatibility.json").read_text())
-EDGE_RULES = MATRIX["edges"]
-NODE_TYPES = MATRIX["node_types"]
+EDGE_RULES = spec.edge_rules()
+NODE_TYPES = spec.node_types()
 GOLDEN = json.loads((ROOT / "examples" / "rag-support-agent.aiflow").read_text())
 
 REF_FOR = {"llm": "m_x", "tool": "t_x", "prompt": "p_x", "vector_store": "ds_x"}
