@@ -1,0 +1,25 @@
+{
+  "$schema": "https://code.claude.com/schemas/marketplace.json",
+  "name": "aiflow",
+  "owner": {
+    "name": "Ayush Singh",
+    "url": "https://github.com/AyushSinghRana15"
+  },
+  "description": "AIFLOW — a framework-independent semantic representation of AI workflows.",
+  "version": "0.1.0",
+  "plugins": [
+    {
+      "name": "aiflow",
+      "displayName": "AIFLOW",
+      "description": "Map, validate, and review the AI workflow of a codebase. Extracts agents, LLM calls, prompts, tools, retrievers and vector stores from source, with a source reference and a confidence on every claim.",
+      "version": "0.1.0",
+      "source": "./claude-plugin",
+      "author": { "name": "Ayush Singh" },
+      "homepage": "https://github.com/AyushSinghRana15/AIFLOW",
+      "repository": "https://github.com/AyushSinghRana15/AIFLOW",
+      "license": "Apache-2.0",
+      "category": "documentation",
+      "keywords": ["ai", "workflow", "llm", "agents", "rag", "graph", "architecture"]
+    }
+  ]
+}

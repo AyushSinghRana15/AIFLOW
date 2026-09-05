@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2088" height="268" viewBox="0 0 2088 268" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" role="img">
+<title>acme-support-agent</title>
+<rect width="2088" height="268" fill="#0e1014"/>
+<defs>
+<marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6b7280"/></marker>
+</defs>
+<path d="M220,117 C260,117 268,117 308,117" fill="none" stroke="#6b7280" stroke-width="1.5" opacity="0.65" marker-end="url(#a)"/>
+<path d="M480,117 C520,117 528,75 568,75" fill="none" stroke="#6b7280" stroke-width="1.5" opacity="0.65" marker-end="url(#a)" stroke-dasharray="5 4"/>
+<path d="M480,117 C520,117 528,159 568,159" fill="none" stroke="#6b7280" stroke-width="2.0" opacity="0.65" marker-end="url(#a)"/>
+<path d="M740,159 C780,159 788,117 828,117" fill="none" stroke="#6b7280" stroke-width="1.5" opacity="0.65" marker-end="url(#a)"/>
+<path d="M1000,117 C1040,117 1048,75 1088,75" fill="none" stroke="#6b7280" stroke-width="1.5" opacity="0.65" marker-end="url(#a)" stroke-dasharray="2 4"/>
+<text x="1044" y="90" text-anchor="middle" font-size="9" fill="#9aa1ae">needs grounding</text>
+<path d="M1000,117 C1040,117 1048,159 1088,159" fill="none" stroke="#6b7280" stroke-width="1.5" opacity="0.65" marker-end="url(#a)" stroke-dasharray="2 4"/>
+<text x="1044" y="132" text-anchor="middle" font-size="9" fill="#9aa1ae">ticket status question</text>
+<path d="M1000,117 C1157,117 1191,159 1348,159" fill="none" stroke="#6b7280" stroke-width="1.5" opacity="0.65" marker-end="url(#a)" stroke-dasharray="2 4"/>
+<text x="1174" y="132" text-anchor="middle" font-size="9" fill="#9aa1ae">answer directly</text>
+<path d="M1260,75 C1300,75 1308,75 1348,75" fill="none" stroke="#3bc9db" stroke-width="1.5" opacity="0.65" marker-end="url(#a)"/>
+<path d="M1260,75 C1300,75 1308,159 1348,159" fill="none" stroke="#6b7280" stroke-width="1.5" opacity="0.65" marker-end="url(#a)"/>
+<path d="M1260,159 C1300,159 1308,159 1348,159" fill="none" stroke="#6b7280" stroke-width="1.5" opacity="0.65" marker-end="url(#a)"/>
+<path d="M1520,159 C1560,159 1568,75 1608,75" fill="none" stroke="#6b7280" stroke-width="1.5" opacity="0.65" marker-end="url(#a)" stroke-dasharray="5 4"/>
+<path d="M1520,159 C1560,159 1568,159 1608,159" fill="none" stroke="#6b7280" stroke-width="2.0" opacity="0.65" marker-end="url(#a)"/>
+<path d="M1780,159 C1820,159 1828,117 1868,117" fill="none" stroke="#6b7280" stroke-width="2.4" opacity="0.65" marker-end="url(#a)"/>
+<g transform="translate(48,90)">
+<rect width="172" height="54" rx="9" fill="#171a21" stroke="#69db7c" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#e7e9ee">User query</text>
+<text x="12" y="38" font-size="10" fill="#9aa1ae">input</text>
+</g>
+<g transform="translate(308,90)">
+<rect width="172" height="54" rx="9" fill="#171a21" stroke="#748ffc" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#e7e9ee">Supervisor</text>
+<text x="12" y="38" font-size="10" fill="#9aa1ae">agent</text>
+<text x="162" y="22" text-anchor="end" font-size="11" fill="#fcc419">▲</text>
+</g>
+<g transform="translate(568,48)">
+<rect width="172" height="54" rx="9" fill="#171a21" stroke="#38d9a9" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#e7e9ee">Routing prompt</text>
+<text x="12" y="38" font-size="10" fill="#9aa1ae">prompt</text>
+</g>
+<g transform="translate(568,132)">
+<rect width="172" height="54" rx="9" fill="#171a21" stroke="#b197fc" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#e7e9ee">Router model call</text>
+<text x="12" y="38" font-size="10" fill="#9aa1ae">llm</text>
+</g>
+<g transform="translate(828,90)">
+<rect width="172" height="54" rx="9" fill="#171a21" stroke="#ffa94d" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#e7e9ee">Route decision</text>
+<text x="12" y="38" font-size="10" fill="#9aa1ae">condition</text>
+</g>
+<g transform="translate(1088,48)">
+<rect width="172" height="54" rx="9" fill="#171a21" stroke="#3bc9db" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#e7e9ee">Knowledge-base retrie…</text>
+<text x="12" y="38" font-size="10" fill="#9aa1ae">retriever</text>
+<text x="162" y="22" text-anchor="end" font-size="11" fill="#fcc419">▲</text>
+</g>
+<g transform="translate(1348,48)">
+<rect width="172" height="54" rx="9" fill="#171a21" stroke="#74c0fc" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#e7e9ee">Support KB index</text>
+<text x="12" y="38" font-size="10" fill="#9aa1ae">vector_store</text>
+</g>
+<g transform="translate(1088,132)">
+<rect width="172" height="54" rx="9" fill="#171a21" stroke="#ffc078" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#e7e9ee">Ticket lookup</text>
+<text x="12" y="38" font-size="10" fill="#9aa1ae">tool</text>
+</g>
+<g transform="translate(1348,132)">
+<rect width="172" height="54" rx="9" fill="#171a21" stroke="#748ffc" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#e7e9ee">Answerer</text>
+<text x="12" y="38" font-size="10" fill="#9aa1ae">agent</text>
+</g>
+<g transform="translate(1608,48)">
+<rect width="172" height="54" rx="9" fill="#171a21" stroke="#38d9a9" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#e7e9ee">Answer synthesis prom…</text>
+<text x="12" y="38" font-size="10" fill="#9aa1ae">prompt</text>
+</g>
+<g transform="translate(1608,132)">
+<rect width="172" height="54" rx="9" fill="#171a21" stroke="#b197fc" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#e7e9ee">Answer model call</text>
+<text x="12" y="38" font-size="10" fill="#9aa1ae">llm</text>
+</g>
+<g transform="translate(1868,90)">
+<rect width="172" height="54" rx="9" fill="#171a21" stroke="#ff8787" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#e7e9ee">Support reply</text>
+<text x="12" y="38" font-size="10" fill="#9aa1ae">output</text>
+</g>
+<circle cx="52" cy="248" r="4" fill="#748ffc"/>
+<text x="62" y="252" font-size="10.5" fill="#9aa1ae">agent</text>
+<circle cx="105.0" cy="248" r="4" fill="#ffa94d"/>
+<text x="115.0" y="252" font-size="10.5" fill="#9aa1ae">condition</text>
+<circle cx="182.8" cy="248" r="4" fill="#69db7c"/>
+<text x="192.8" y="252" font-size="10.5" fill="#9aa1ae">input</text>
+<circle cx="235.8" cy="248" r="4" fill="#b197fc"/>
+<text x="245.8" y="252" font-size="10.5" fill="#9aa1ae">llm</text>
+<circle cx="276.40000000000003" cy="248" r="4" fill="#ff8787"/>
+<text x="286.40000000000003" y="252" font-size="10.5" fill="#9aa1ae">output</text>
+<circle cx="335.6" cy="248" r="4" fill="#38d9a9"/>
+<text x="345.6" y="252" font-size="10.5" fill="#9aa1ae">prompt</text>
+<circle cx="394.8" cy="248" r="4" fill="#3bc9db"/>
+<text x="404.8" y="252" font-size="10.5" fill="#9aa1ae">retriever</text>
+<circle cx="472.6" cy="248" r="4" fill="#ffc078"/>
+<text x="482.6" y="252" font-size="10.5" fill="#9aa1ae">tool</text>
+<circle cx="519.4" cy="248" r="4" fill="#74c0fc"/>
+<text x="529.4" y="252" font-size="10.5" fill="#9aa1ae">vector_store</text>
+</svg>

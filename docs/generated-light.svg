@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1308" height="520" viewBox="0 0 1308 520" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" role="img">
+<title>sample-project</title>
+<rect width="1308" height="520" fill="#ffffff"/>
+<defs>
+<marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9aa1ae"/></marker>
+</defs>
+<path d="M480,243 C520,243 528,327 568,327" fill="none" stroke="#9aa1ae" stroke-width="2.0" opacity="0.65" marker-end="url(#a)"/>
+<path d="M480,243 C520,243 528,159 568,159" fill="none" stroke="#9aa1ae" stroke-width="1.5" opacity="0.65" marker-end="url(#a)" stroke-dasharray="5 4"/>
+<path d="M740,243 C780,243 788,327 828,327" fill="none" stroke="#9aa1ae" stroke-width="2.0" opacity="0.65" marker-end="url(#a)"/>
+<path d="M740,243 C780,243 788,75 828,75" fill="none" stroke="#9aa1ae" stroke-width="1.5" opacity="0.65" marker-end="url(#a)" stroke-dasharray="5 4"/>
+<path d="M740,243 C780,243 788,243 828,243" fill="none" stroke="#9aa1ae" stroke-width="2.0" opacity="0.65" marker-end="url(#a)"/>
+<path d="M740,243 C780,243 788,159 828,159" fill="none" stroke="#1098ad" stroke-width="1.5" opacity="0.65" marker-end="url(#a)"/>
+<path d="M1000,159 C1040,159 1048,243 1088,243" fill="none" stroke="#1098ad" stroke-width="1.5" opacity="0.65" marker-end="url(#a)"/>
+<path d="M220,243 C260,243 268,243 308,243" fill="none" stroke="#9aa1ae" stroke-width="1.5" opacity="0.65" marker-end="url(#a)"/>
+<path d="M480,243 C520,243 528,243 568,243" fill="none" stroke="#9aa1ae" stroke-width="1.5" opacity="0.65" marker-end="url(#a)"/>
+<path d="M740,243 C780,243 788,411 828,411" fill="none" stroke="#9aa1ae" stroke-width="2.4" opacity="0.65" marker-end="url(#a)"/>
+<g transform="translate(568,132)">
+<rect width="172" height="54" rx="9" fill="#ffffff" stroke="#0ca678" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#16181d">ROUTER_PROMPT</text>
+<text x="12" y="38" font-size="10" fill="#6b7280">prompt</text>
+</g>
+<g transform="translate(828,48)">
+<rect width="172" height="54" rx="9" fill="#ffffff" stroke="#0ca678" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#16181d">ANSWER_PROMPT</text>
+<text x="12" y="38" font-size="10" fill="#6b7280">prompt</text>
+</g>
+<g transform="translate(828,216)">
+<rect width="172" height="54" rx="9" fill="#ffffff" stroke="#f08c00" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#16181d">lookup_ticket</text>
+<text x="12" y="38" font-size="10" fill="#6b7280">tool</text>
+</g>
+<g transform="translate(1088,216)">
+<rect width="172" height="54" rx="9" fill="#ffffff" stroke="#1971c2" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#16181d">kb_collection</text>
+<text x="12" y="38" font-size="10" fill="#6b7280">vector_store</text>
+</g>
+<g transform="translate(308,216)">
+<rect width="172" height="54" rx="9" fill="#ffffff" stroke="#4c6ef5" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#16181d">SupervisorAgent</text>
+<text x="12" y="38" font-size="10" fill="#6b7280">agent</text>
+</g>
+<g transform="translate(568,216)">
+<rect width="172" height="54" rx="9" fill="#ffffff" stroke="#4c6ef5" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#16181d">AnswererAgent</text>
+<text x="12" y="38" font-size="10" fill="#6b7280">agent</text>
+</g>
+<g transform="translate(828,132)">
+<rect width="172" height="54" rx="9" fill="#ffffff" stroke="#1098ad" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#16181d">KBRetriever</text>
+<text x="12" y="38" font-size="10" fill="#6b7280">retriever</text>
+</g>
+<g transform="translate(568,300)">
+<rect width="172" height="54" rx="9" fill="#ffffff" stroke="#7950f2" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#16181d">SupervisorAgent.create</text>
+<text x="12" y="38" font-size="10" fill="#6b7280">llm</text>
+</g>
+<g transform="translate(828,300)">
+<rect width="172" height="54" rx="9" fill="#ffffff" stroke="#7950f2" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#16181d">AnswererAgent.create</text>
+<text x="12" y="38" font-size="10" fill="#6b7280">llm</text>
+</g>
+<g transform="translate(48,216)">
+<rect width="172" height="54" rx="9" fill="#ffffff" stroke="#2f9e44" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#16181d">handle_support_request</text>
+<text x="12" y="38" font-size="10" fill="#6b7280">input</text>
+</g>
+<g transform="translate(828,384)">
+<rect width="172" height="54" rx="9" fill="#ffffff" stroke="#e03131" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#16181d">handle_support_reques…</text>
+<text x="12" y="38" font-size="10" fill="#6b7280">output</text>
+</g>
+<circle cx="52" cy="500" r="4" fill="#4c6ef5"/>
+<text x="62" y="504" font-size="10.5" fill="#6b7280">agent</text>
+<circle cx="105.0" cy="500" r="4" fill="#2f9e44"/>
+<text x="115.0" y="504" font-size="10.5" fill="#6b7280">input</text>
+<circle cx="158.0" cy="500" r="4" fill="#7950f2"/>
+<text x="168.0" y="504" font-size="10.5" fill="#6b7280">llm</text>
+<circle cx="198.6" cy="500" r="4" fill="#e03131"/>
+<text x="208.6" y="504" font-size="10.5" fill="#6b7280">output</text>
+<circle cx="257.8" cy="500" r="4" fill="#0ca678"/>
+<text x="267.8" y="504" font-size="10.5" fill="#6b7280">prompt</text>
+<circle cx="317.0" cy="500" r="4" fill="#1098ad"/>
+<text x="327.0" y="504" font-size="10.5" fill="#6b7280">retriever</text>
+<circle cx="394.8" cy="500" r="4" fill="#f08c00"/>
+<text x="404.8" y="504" font-size="10.5" fill="#6b7280">tool</text>
+<circle cx="441.6" cy="500" r="4" fill="#1971c2"/>
+<text x="451.6" y="504" font-size="10.5" fill="#6b7280">vector_store</text>
+</svg>

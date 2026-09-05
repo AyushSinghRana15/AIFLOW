@@ -50,6 +50,36 @@ jobs:
           python -m aiflow.cli generate examples/sample-project -o /tmp/gen.aiflow
           python -m aiflow.cli validate /tmp/gen.aiflow --strict
 
+      # README diagrams are committed, so they can drift from the code
+      - name: README diagrams are current
+        run: python docs/build.py --check
+
+      - name: Plugin manifests are well formed
+        run: |
+          python - <<'PY'
+          import json, pathlib, re
+          market = json.load(open(".claude-plugin/marketplace.json"))
+          plugin = json.load(open("claude-plugin/.claude-plugin/plugin.json"))
+          assert re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", plugin["name"]), plugin["name"]
+          assert re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", market["name"]), market["name"]
+          names = {p["name"] for p in market["plugins"]}
+          assert plugin["name"] in names, f'{plugin["name"]} missing from marketplace'
+          for entry in market["plugins"]:
+              src = entry["source"]
+              if isinstance(src, str) and src.startswith("./"):
+                  assert pathlib.Path(src).is_dir(), src
+          skills = sorted(pathlib.Path("claude-plugin/skills").glob("*/SKILL.md"))
+          assert skills, "no skills found"
+          for skill in skills:
+              body = skill.read_text()
+              assert body.startswith("---"), skill
+              fm = body.split("---")[1]
+              name = re.search(r"^name: (.+)$", fm, re.M).group(1).strip()
+              assert name == skill.parent.name, f"{skill}: name {name!r} != dir"
+              assert re.search(r"^description: ", fm, re.M), skill
+          print(f"plugin ok: {plugin['name']}, {len(skills)} skill(s)")
+          PY
+
   package:
     name: build and install
     runs-on: ubuntu-latest

@@ -17,6 +17,7 @@ from aiflow import Document, Graph  # noqa: E402
 from aiflow.cli import main as cli_main  # noqa: E402
 from aiflow.layout import compute_layout  # noqa: E402
 from aiflow.render import build_payload, render_html  # noqa: E402
+from aiflow.svg import THEMES, render_svg  # noqa: E402
 
 GOLDEN_PATH = ROOT / "examples" / "rag-support-agent.aiflow"
 RESET, RED, GREEN = "\033[0m", "\033[31m", "\033[32m"
@@ -217,11 +218,100 @@ def suite_render_cli(r: Results):
         r.eq(code, 0, "cli: vertical orientation is accepted")
 
 
+def suite_svg(r: Results):
+    import xml.dom.minidom
+
+    doc = Document.load(GOLDEN_PATH)
+    light = render_svg(doc, theme="light")
+    dark = render_svg(doc, theme="dark")
+
+    for theme, out in (("light", light), ("dark", dark)):
+        try:
+            xml.dom.minidom.parseString(out)
+            ok = True
+        except Exception as exc:            # noqa: BLE001 - reporting the parse error
+            ok, exc_text = False, str(exc)
+        r.check(ok, f"svg: {theme} output is well-formed XML",
+                "" if ok else exc_text)
+
+    r.check(light != dark, "svg: the themes differ")
+    r.check(THEMES["light"]["bg"] in light and THEMES["dark"]["bg"] in dark,
+            "svg: each theme paints its own background")
+
+    r.check("<style" not in light,
+            "svg: no <style> block, which sanitizing renderers strip")
+    r.check("http://" not in light.replace("http://www.w3.org/2000/svg", ""),
+            "svg: no external references")
+
+    # every node and edge is drawn
+    r.check(light.count("<rect") == len(doc.nodes) + 1,   # +1 background
+            "svg: one rect per node plus the background")
+    r.check(light.count("<path d=") == len(doc.edges) + 1,   # +1 arrowhead marker
+            "svg: one path per edge, plus the arrowhead marker")
+
+    evil = Document.load(GOLDEN_PATH)
+    evil.nodes[0].name = '<script>alert(1)</script>&"'
+    out = render_svg(evil)
+    r.check("<script>" not in out and "&lt;script&gt;" in out,
+            "svg: node names are XML-escaped")
+
+    tall = render_svg(doc, orientation="vertical")
+    r.check(tall != light, "svg: orientation changes the output")
+
+    try:
+        render_svg(doc, theme="neon")
+        bad = False
+    except ValueError:
+        bad = True
+    r.check(bad, "svg: an unknown theme is rejected rather than silently defaulted")
+
+
+def suite_view(r: Results):
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        sample = ROOT / "examples" / "sample-project"
+
+        out = tmp / "v.html"
+        code, msg, _ = run_cli("view", str(sample), "--no-open", "-o", str(out))
+        r.eq(code, 0, "view: analyzing a source tree succeeds")
+        r.check(out.is_file(), "view: a page is written")
+        r.check("analyzed" in msg, "view: the analysis is summarised")
+
+        saved = tmp / "v.aiflow"
+        code, _, _ = run_cli("view", str(sample), "--no-open", "-o", str(tmp / "v2.html"),
+                             "--save", str(saved))
+        r.eq(code, 0, "view: --save succeeds")
+        r.check(saved.is_file(), "view: --save writes the document too")
+        r.eq(run_cli("validate", str(saved), "--strict")[0], 0,
+             "view: the saved document is valid")
+
+        code, _, _ = run_cli("view", str(GOLDEN_PATH), "--no-open", "-o", str(tmp / "d.html"))
+        r.eq(code, 0, "view: an existing document is opened directly")
+
+        svg_out = tmp / "v.svg"
+        code, _, _ = run_cli("view", str(GOLDEN_PATH), "--no-open", "-o", str(svg_out))
+        r.eq(code, 0, "view: an .svg output path succeeds")
+        r.check(svg_out.read_text().startswith("<svg"),
+                "view: format follows the output extension")
+
+        r.eq(run_cli("view", str(tmp / "nope"), "--no-open")[0], 1,
+             "view: a missing path exits non-zero")
+
+        broken = json.loads(GOLDEN_PATH.read_text())
+        broken["edges"][0]["target"] = "ghost"
+        bad = tmp / "bad.aiflow"
+        bad.write_text(json.dumps(broken))
+        code, _, err = run_cli("view", str(bad), "--no-open", "-o", str(tmp / "b.html"))
+        r.eq(code, 1, "view: an invalid document is refused")
+        r.check("AF211" in err, "view: the refusal names the diagnostic")
+
+
 # ---------------------------------------------------------------------------
 def main() -> int:
     r = Results()
     for name, suite in (("layout", suite_layout), ("render", suite_render),
-                        ("render-cli", suite_render_cli)):
+                        ("svg", suite_svg), ("render-cli", suite_render_cli),
+                        ("view", suite_view)):
         print(f"\n{name}")
         suite(r)
 

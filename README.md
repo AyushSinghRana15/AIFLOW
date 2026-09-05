@@ -1,84 +1,110 @@
-# AIFLOW
+<h1 align="center">AIFLOW</h1>
 
-**A framework-independent file format for the semantic structure of AI workflows.**
+<p align="center">
+  <strong>A framework-independent file format for the semantic structure of AI workflows.</strong>
+</p>
 
-`.aiflow` is not a diagram file. It is the semantic representation of an AI workflow
-that *can* be rendered as a diagram.
+<p align="center">
+  <a href="https://github.com/AyushSinghRana15/AIFLOW/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/AyushSinghRana15/AIFLOW/actions/workflows/ci.yml/badge.svg"></a>
+  <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-3776ab.svg">
+  <a href="spec/SPEC.md"><img alt="Spec v1.0" src="https://img.shields.io/badge/spec-v1.0-6f42c1.svg"></a>
+  <a href="LICENSE"><img alt="Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-16a34a.svg"></a>
+</p>
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/generated-dark.svg">
+    <img alt="A workflow extracted from a Python project: an entrypoint feeding a supervisor agent, which routes to an answerer agent backed by a retriever, a vector store, prompts and a tool" src="docs/generated-light.svg" width="100%">
+  </picture>
+</p>
+
+<p align="center"><sub>Not hand-drawn. This is <code>aiflow generate</code> run against the Python project in <a href="examples/sample-project"><code>examples/sample-project</code></a>.</sub></p>
+
+---
+
+`.aiflow` is **not** a diagram file. It is the semantic representation of an AI
+workflow that *can* be rendered as a diagram.
+
+## Contents
+
+- [The problem](#the-problem) · [Quick start](#quick-start) · [Guide](#guide)
+- [The format](#the-format) · [What makes it different](#what-makes-it-different)
+- [Library API](#library-api) · [Architecture](#architecture)
+- [Claude Code plugin](#claude-code-plugin) · [Development](#development) · [Roadmap](#roadmap)
 
 ## The problem
 
-AI workflows are fragmented across code, Markdown, Mermaid, JSON/YAML, framework
-graphs, and diagram tools. None of them connects:
+AI workflows are scattered across code, Markdown, Mermaid, YAML, framework graphs,
+and diagram tools. None of them connects:
 
 ```
 components → relationships → data flow → behavior → source code → AI context
 ```
 
-Diagrams drift from code. Framework graphs do not survive a framework change. Neither
-is answerable by a model.
+Diagrams drift from code the day after they are drawn. Framework graphs do not
+survive a framework change. Neither can be queried by a model. AIFLOW is one
+machine-readable graph that holds all six, and knows where each claim came from.
 
-## The model
-
-```
-AIFLOW = Nodes + Semantic Edges + Registries + Metadata + Provenance
-
-              AI Project
-                  ↓
-          AIFLOW Semantic Graph
-                  ↓
-   ┌──────────────┬──────────────┬──────────────┐
-   │ Visualization│ AI Reasoning │ Documentation│
-   └──────────────┴──────────────┴──────────────┘
-```
-
-**Nodes** — `agent` `llm` `tool` `prompt` `retriever` `vector_store` `input` `output` `condition`
-
-**Edges** — `calls` `uses` `retrieves` `passes` `produces` `routes_to`
-
-Edge type carries meaning. `calls` transfers control; `uses` declares a dependency;
-`passes` moves data between named ports. A renderer can draw all three the same way —
-a model reasoning about failure paths cannot.
-
-## What is in this repo
-
-| Path | |
-|---|---|
-| [`spec/SPEC.md`](spec/SPEC.md) | The v1 specification |
-| [`spec/aiflow-v1.schema.json`](spec/aiflow-v1.schema.json) | JSON Schema (draft 2020-12) — structural validation |
-| [`spec/edge-compatibility.json`](spec/edge-compatibility.json) | Normative edge/node type matrix — machine-readable |
-| [`examples/rag-support-agent.aiflow`](examples/rag-support-agent.aiflow) | Reference document exercising every node and edge type |
-| [`examples/sample-project/`](examples/sample-project) | A small Python AI app, used as the analyzer's fixture |
-| [`aiflow/`](aiflow) | Python SDK and CLI — model, validator, graph queries, diff, renderer, analyzer |
-| [`tests/`](tests) | Conformance suites |
-
-## Install
+## Quick start
 
 ```bash
-pip install -e .
+pip install aiflow-format
 ```
 
-## Use it
+Point it at a Python project and look at what comes back:
+
+```bash
+aiflow view ./my-ai-project
+```
+
+That analyzes the source, builds the graph, and opens it in your browser. To keep
+the document:
 
 ```bash
 aiflow generate ./my-ai-project -o project.aiflow
-aiflow validate examples/rag-support-agent.aiflow --strict
-aiflow inspect examples/rag-support-agent.aiflow --paths --unhandled
-aiflow render examples/rag-support-agent.aiflow --open
-aiflow init -o project.aiflow
-aiflow diff old.aiflow new.aiflow
+aiflow validate project.aiflow --strict
 ```
 
-## Generate
+<details>
+<summary>Install from source</summary>
 
 ```bash
-aiflow generate ./my-ai-project
+git clone https://github.com/AyushSinghRana15/AIFLOW.git
+cd AIFLOW
+pip install -e .
+aiflow --version
+```
+</details>
+
+## Guide
+
+| Command | What it does |
+|---|---|
+| [`aiflow view`](#aiflow-view) | Analyze a project (or open a document) and show it in a browser |
+| [`aiflow generate`](#aiflow-generate) | Extract a `.aiflow` from a Python project |
+| [`aiflow validate`](#aiflow-validate) | Check a document, structurally and semantically |
+| [`aiflow inspect`](#aiflow-inspect) | Ask behavioral questions about a workflow |
+| [`aiflow render`](#aiflow-render) | Write an interactive page or a static SVG |
+| [`aiflow diff`](#aiflow-diff) | Compare two documents semantically |
+| [`aiflow init`](#aiflow-init) | Start a document by hand |
+
+### `aiflow view`
+
+The one command worth remembering. Give it a source tree or a `.aiflow` file.
+
+```bash
+aiflow view ./my-ai-project              # analyze, then open in a browser
+aiflow view project.aiflow               # open an existing document
+aiflow view . --save project.aiflow      # keep the extracted document too
+aiflow view . -o diagram.svg --no-open   # static SVG instead of a page
 ```
 
-Walks the project's syntax tree and extracts agents, LLM calls, prompts, tools,
-retrievers, vector stores, and the data flow between them — with a source reference
-and a confidence on every claim.
+Output format follows the extension: `.svg` writes a static diagram, anything else
+writes the interactive page.
 
-```
+### `aiflow generate`
+
+```bash
 $ aiflow generate examples/sample-project
 wrote project.aiflow
   analyzed 8 file(s) -> 11 nodes, 10 edges
@@ -86,44 +112,73 @@ wrote project.aiflow
   note branching is not extracted by static analysis; add condition nodes by hand
 ```
 
-**What it will not do.** It reports what the syntax tree shows and nothing else. A
-class becomes an `agent` because it contains an LLM invocation, never because it is
-called `SupervisorAgent`. Two components are linked by `passes` only when one call
-provably consumes a value another produced — not because they sit in the same
-function. And it emits no `ai_context` at all: intent, summaries, and failure modes
-are the semantic analyzer's job, and asserting them here would put guesses behind a
-label that means *parsed*. Where it cannot see something — runtime-assembled graphs,
-branching — it says so rather than inventing it.
+It walks the syntax tree and extracts agents, LLM calls, prompts, tools, retrievers,
+vector stores, and the data flow between them — with a source reference and a
+confidence on every claim.
 
-## Render
+> **What it will not do.** It reports what the syntax tree shows and nothing else.
+>
+> - A class becomes an `agent` because it **contains an LLM invocation**, never
+>   because it is named `SupervisorAgent`. There is a test asserting exactly that.
+> - Two components are linked by `passes` only when a later call **provably consumes**
+>   a value an earlier one produced — not because they sit in the same function.
+> - It emits **no `ai_context` at all**. Intent, summaries, and failure modes belong
+>   to the semantic analyzer; asserting them here would put guesses behind a label
+>   that means *parsed*.
+> - Where it cannot see — runtime-assembled graphs, branching — it says so instead of
+>   emitting a graph that reads as complete.
+
+Supported out of the box: Anthropic, OpenAI, Google, Bedrock · Chroma, Pinecone,
+Qdrant, Weaviate, FAISS, pgvector · FastAPI/Flask entrypoints · `@tool`-style
+decorators and tool schema literals. Rules live in
+[`aiflow/analyze/signatures.py`](aiflow/analyze/signatures.py) as a table — adding a
+provider is a data edit.
+
+### `aiflow validate`
 
 ```bash
-aiflow render project.aiflow -o workflow.html
+$ aiflow validate project.aiflow --strict
+
+project.aiflow  [OK]  0 error(s), 0 warning(s)
 ```
 
-One self-contained HTML file — no CDN, no build step, no server. It opens from a
-`file://` path or a CI artifact. The page gives you a pan/zoom graph laid out by
-edge semantics, a searchable component explorer, per-node detail with **clickable
-source permalinks pinned to the commit**, filter chips per edge type, and path
-highlighting from input to output. Nodes carrying an unhandled failure or an
-AI-inferred claim are flagged in the graph itself.
+Validation is two-tier, because JSON Schema cannot dereference an id to its node type:
 
-Layout is computed at render time, never stored in the document — the spec treats
-layout as presentation and the semantic model as authoritative.
+| Level | Scope | Enforced by |
+|---|---|---|
+| **L1 structural** | Shape, enums, required fields, conditional requirements | [`aiflow-v1.schema.json`](spec/aiflow-v1.schema.json) |
+| **L2 semantic** | Referential integrity, edge compatibility, port bindings, reachability, provenance discipline | [`aiflow/validate.py`](aiflow/validate.py) |
 
-`aiflow inspect` answers behavioral questions directly against the graph:
+A document is conformant only when it passes both. Every finding carries a code
+(`AF230`, `AF281`, …) — the full table is in [the spec](spec/SPEC.md#diagnostic-codes).
+`--json` emits findings for tooling; `--strict` treats warnings as errors.
 
-```
+### `aiflow inspect`
+
+Each flag answers one of the questions the format exists to serve.
+
+| Flag | Question |
+|---|---|
+| *(none)* | What is in this workflow? |
+| `--paths` | Show all paths to the final response |
+| `--rag` | Where is RAG used? |
+| `--tools` | Which agents use external tools? |
+| `--unhandled` | Find missing error handling |
+| `--inferred` | Which claims were guessed rather than parsed? |
+| `--node ID` | What is this component, and what connects to it? |
+| `--json` | All of the above, for tooling |
+
+```bash
 $ aiflow inspect examples/rag-support-agent.aiflow --paths
 
 Paths to output
   in_user_query(input) --passes--> agent_supervisor(agent) --calls--> llm_router(llm)
     --passes--> cond_route(condition) --routes_to--> retr_kb(retriever)
     --passes--> agent_answerer(agent) --calls--> llm_answer(llm) --produces--> out_response(output)
-  ... 2 more, one per branch
+  ... one path per branch
 ```
 
-```
+```bash
 $ aiflow inspect examples/rag-support-agent.aiflow --unhandled
 
 Unhandled failure modes
@@ -131,16 +186,125 @@ Unhandled failure modes
   retr_kb: Vector store unreachable; the call raises and the graph aborts without a degraded path.
 ```
 
-| Flag | Question it answers |
-|---|---|
-| `--paths` | Show all paths to the final response |
-| `--rag` | Where is RAG used? |
-| `--tools` | Which agents use external tools? |
-| `--unhandled` | Find missing error handling |
-| `--inferred` | Which claims were guessed rather than parsed? |
-| `--node ID` | What is this component, and what connects to it? |
+### `aiflow render`
 
-## As a library
+```bash
+aiflow render project.aiflow -o workflow.html         # interactive page
+aiflow render project.aiflow -o workflow.svg          # static diagram
+aiflow render project.aiflow -o dark.svg --theme dark
+```
+
+The HTML is **one self-contained file** — no CDN, no build step, no server. It opens
+from a `file://` path or a CI artifact. You get a pan/zoom graph laid out by edge
+semantics, a searchable component explorer, per-node detail with **source permalinks
+pinned to the commit**, filter chips per edge type, and path highlighting.
+
+Layout is computed at render time and never stored in the document: the spec treats
+layout as presentation and the semantic model as authoritative.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/workflow-dark.svg">
+    <img alt="The reference workflow rendered as SVG, showing all nine node types and six edge types" src="docs/workflow-light.svg" width="100%">
+  </picture>
+</p>
+
+<p align="center"><sub>The reference workflow. <code>▲</code> marks an unhandled failure, <code>◆</code> an AI-inferred claim.</sub></p>
+
+### `aiflow diff`
+
+```bash
+$ aiflow diff before.aiflow after.aiflow
+modified prompt      p_answer
+           template: 'You are an Acme support agent...' -> 'You are a support agent...'
+
+1 change(s)
+```
+
+Comparison is by **id**, not position, so reordering an array is not a change. Because
+reusable components live in registries, editing one prompt reports as a single change
+no matter how many nodes reference it. `--exit-code` makes it usable as a CI gate.
+
+### `aiflow init`
+
+```bash
+aiflow init -o project.aiflow --name my-workflow
+```
+
+Writes a minimal document that already validates, for workflows you describe by hand.
+
+## The format
+
+```
+AIFLOW = Nodes + Semantic Edges + Registries + Metadata + Provenance
+```
+
+```mermaid
+flowchart TB
+    subgraph graph["Graph — occurrences"]
+        direction LR
+        N["<b>Nodes</b><br/>agent · llm · tool · prompt<br/>retriever · vector_store<br/>input · output · condition"]
+        E["<b>Edges</b><br/>calls · uses · retrieves<br/>passes · produces · routes_to"]
+        N -.-> E
+    end
+    subgraph reg["Registries — definitions, declared once"]
+        direction LR
+        R["prompts · models · tools · data_sources"]
+    end
+    subgraph meta["Every element carries"]
+        direction LR
+        P["<b>provenance</b><br/>how this was learned<br/>+ confidence"]
+        S["<b>source</b><br/>file · lines · symbol<br/>+ commit"]
+    end
+    graph --> reg
+    graph --> meta
+    reg --> meta
+```
+
+**Nodes are positions in the graph. Registries hold reusable definitions.** A prompt
+used in three places is *one* registry entry and *three* nodes referencing it.
+
+**Edge type carries meaning**, it is not decoration:
+
+| Edge | Semantics |
+|---|---|
+| `calls` | Invokes the target, transferring control. The source waits. |
+| `uses` | Static dependency, no control transfer. |
+| `retrieves` | Retrieval operation against a store. |
+| `passes` | Data flow from an output port to an input port. |
+| `produces` | Yields a terminal result. |
+| `routes_to` | Conditional branch — carries `when`, or is the single `default`. |
+
+Which node types may sit at each end of each edge is the normative
+[compatibility matrix](spec/edge-compatibility.json), machine-readable so SDKs and
+adapters load it rather than hardcoding it.
+
+The full specification is in [`spec/SPEC.md`](spec/SPEC.md).
+
+## What makes it different
+
+### Provenance is structural, not advisory
+
+Every element records **how it was learned** — `static_analysis`, `framework_adapter`,
+`runtime_trace`, `ai_inference`, or `manual`. When the method is `ai_inference`, the
+schema **requires** a confidence score:
+
+```json
+{ "method": "ai_inference", "confidence": 0.71,
+  "generator": { "name": "aiflow-semantic-analyzer", "model": "claude-sonnet-4-5" },
+  "evidence": [{ "file": "agents/answerer.py", "start_line": 41 }] }
+```
+
+A model cannot silently assert workflow structure as fact. `aiflow inspect --inferred`
+lists every claim that was guessed rather than parsed and has not been reviewed, and
+`reviewed_by` promotes a human-confirmed inference without erasing the audit trail.
+
+### Occurrences are separate from definitions
+
+Retargeting an index or editing a prompt is a single-site change, and `aiflow diff`
+reports it once instead of once per call site. There is a test that pins exactly this.
+
+## Library API
 
 ```python
 from aiflow import Document, Graph, diff
@@ -152,56 +316,136 @@ for path in g.paths_to_outputs():
     print(path.render(doc))
 
 # what stops working if the vector store fails
-print([n.id for n in g.impact_of("vs_kb")])
+[n.id for n in g.impact_of("vs_kb")]
+
+# declared failure modes with no handler
+g.unhandled_failures()
 
 # claims a model inferred rather than parsed, not yet human-reviewed
-print(g.low_trust())
+g.low_trust()
+
+# which agent can cause which tool to run
+g.agents_using_tools()
 ```
 
-## Tests
+Decoding and re-encoding a document is **lossless** — an absent field stays absent, a
+field present but empty stays empty. That is what lets `diff` compare two documents
+without reporting phantom changes.
+
+<details>
+<summary>Building a document programmatically</summary>
+
+```python
+from aiflow import Document, Node, Edge, Provenance, validate
+
+doc = Document(
+    nodes=[
+        Node(id="in_q", type="input", name="Question"),
+        Node(id="assistant", type="agent", name="Assistant",
+             provenance=Provenance(method="manual")),
+        Node(id="out_a", type="output", name="Answer"),
+    ],
+    edges=[
+        Edge(id="e1", type="passes", source="in_q", target="assistant"),
+        Edge(id="e2", type="produces", source="assistant", target="out_a"),
+    ],
+)
+report = validate(doc.to_dict())
+assert not report.errors
+doc.save("hand-written.aiflow")
+```
+</details>
+
+## Architecture
+
+```mermaid
+flowchart LR
+    src["AI project<br/><i>source · config</i>"] --> ast["AST parser"]
+    ast --> det["Framework<br/>detector"]
+    det --> asm["Semantic<br/>assembler"]
+    asm --> doc[("<b>project.aiflow</b>")]
+    doc --> view["Interactive<br/>viewer"]
+    doc --> reason["AI reasoning<br/><i>graph queries</i>"]
+    doc --> tools["Developer tools<br/><i>diff · CI gates</i>"]
+```
+
+| Module | Responsibility |
+|---|---|
+| [`aiflow/model.py`](aiflow/model.py) | Typed document model, lossless round-tripping |
+| [`aiflow/validate.py`](aiflow/validate.py) | L1 + L2 validation |
+| [`aiflow/graph.py`](aiflow/graph.py) | Traversal and behavioral queries |
+| [`aiflow/analyze/`](aiflow/analyze) | Python source → document |
+| [`aiflow/layout.py`](aiflow/layout.py) | Deterministic layered layout |
+| [`aiflow/render.py`](aiflow/render.py) · [`svg.py`](aiflow/svg.py) | Interactive page · static diagram |
+| [`aiflow/diff.py`](aiflow/diff.py) | Semantic comparison |
+
+## Claude Code plugin
+
+AIFLOW ships as a [Claude Code](https://claude.com/claude-code) plugin, so you can ask
+about a workflow in plain language instead of remembering flags.
+
+```
+/plugin marketplace add AyushSinghRana15/AIFLOW
+/plugin install aiflow@aiflow
+```
+
+The plugin drives the CLI, so install that too:
 
 ```bash
-python3 tests/run_all.py
+pip install aiflow-format
 ```
 
-687 assertions across four suites. The matrix suite sweeps all 486
-`edge_type × source_type × target_type` combinations against the compatibility
-matrix in both directions, and runs 25 targeted mutations each expected to raise a
-specific diagnostic. The SDK suite covers lossless round-tripping, graph queries,
-diff semantics, and CLI exit codes. The render suite covers layering (including
-cyclic workflows), determinism, and that the page stays self-contained and escapes
-untrusted document content. The analyzer suite pins each detection rule, the
-cross-file links, and the boundary above — including a test asserting that nothing
-generated ever carries invented `ai_context`.
+Three skills, each of which Claude will also reach for on its own when the request
+matches:
 
-## Two things that make this different
+| Skill | Ask it for |
+|---|---|
+| `/aiflow:map` | *"map this project's AI workflow"* · *"how does this agent pipeline work?"* |
+| `/aiflow:check` | *"validate the .aiflow files"* · *"why is this document failing?"* |
+| `/aiflow:review` | *"what happens if the vector DB fails?"* · *"find missing error handling"* |
 
-**Provenance is structural, not advisory.** Anything marked `ai_inference` is
-*required* by the schema to carry a confidence score. A model cannot silently assert
-workflow structure as fact, and `aiflow inspect --inferred` lists every claim that was
-guessed rather than parsed and has not yet been human-reviewed.
+Each skill is instructed to stay inside what the analyzer can actually prove: to read
+the cited source before commenting on it, to say when static analysis could not see
+something rather than implying the project is simpler than it is, and never to silence
+a low-confidence warning by raising the confidence number.
 
-**Occurrences are separate from definitions.** Nodes are positions in the graph;
-prompts, models, tools, and data sources are declared once in registries and
-referenced. Retargeting an index or editing a prompt is a single-site change, and
-`aiflow diff` reports it once instead of once per call site — there is a test that
-pins exactly this.
+<details>
+<summary>Try it without installing</summary>
 
-## Validation is two-tier
+```bash
+git clone https://github.com/AyushSinghRana15/AIFLOW.git
+claude --plugin-dir ./AIFLOW/claude-plugin
+```
+</details>
 
-JSON Schema cannot dereference an id to its node type, so:
+## Development
 
-- **L1 structural** — shape, enums, required fields, conditional requirements → JSON Schema
-- **L2 semantic** — referential integrity, edge compatibility, port bindings, reachability, provenance discipline → validator
+```bash
+pip install -e .
+python tests/run_all.py
+```
 
-A document is conformant only when it passes both. Diagnostic codes are listed in
-[the spec](spec/SPEC.md#diagnostic-codes).
+**710 assertions across four suites.**
+
+| Suite | Covers |
+|---|---|
+| [`test_matrix.py`](tests/test_matrix.py) | An exhaustive sweep of all **486** `edge_type × source_type × target_type` combinations against the compatibility matrix in both directions, plus 25 targeted mutations each expected to raise a specific diagnostic |
+| [`test_sdk.py`](tests/test_sdk.py) | Lossless round-tripping, graph queries, diff semantics, CLI exit codes |
+| [`test_render.py`](tests/test_render.py) | Layering (including cyclic workflows), determinism, SVG output, and that the page stays self-contained and escapes untrusted content |
+| [`test_analyze.py`](tests/test_analyze.py) | Every detection rule, cross-file linking, and that nothing generated carries invented `ai_context` |
+
+Diagrams in this README are generated. Regenerate with `python docs/build.py`;
+CI fails if they drift.
+
+> **A known limit.** The matrix sweep verifies that the validator agrees with
+> `edge-compatibility.json` — it reads the matrix as ground truth, so it stays green
+> if the matrix itself is wrong. The reference example is the anchor that pins the
+> matrix to reality. If you add an edge type, extend that example too.
 
 ## Roadmap
 
 | Phase | | Status |
 |---|---|---|
-| 0 | Research & competitive analysis | — |
 | 1 | AIFLOW specification | ✅ |
 | 2 | JSON Schema | ✅ |
 | 3 | Python SDK | ✅ |
@@ -213,26 +457,9 @@ A document is conformant only when it passes both. Diagnostic codes are listed i
 | 9 | Git / developer integration | |
 | 10 | Ecosystem & open specification | |
 
-### CLI
-
-| Command | Status |
-|---|---|
-| `aiflow init` | ✅ |
-| `aiflow validate` | ✅ |
-| `aiflow inspect` | ✅ |
-| `aiflow diff` | ✅ |
-| `aiflow render` | ✅ |
-| `aiflow generate` | ✅ — plain Python; framework adapters are phase 7 |
-
-## v1 success criteria
-
-Point AIFLOW at an AI project and get:
-
-1. A structured `.aiflow` file
-2. A useful interactive workflow diagram
-3. Code-to-workflow traceability
-4. Validation of the workflow
+Phase 6 is the first component permitted to emit `ai_inference` — which is what the
+provenance model was built for.
 
 ## License
 
-Apache License 2.0 — see [LICENSE](LICENSE).
+[Apache License 2.0](LICENSE)

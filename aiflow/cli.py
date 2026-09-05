@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
+import tempfile
 from pathlib import Path
 
 from . import __version__
@@ -11,6 +13,7 @@ from .diff import diff as diff_docs
 from .graph import Graph
 from .model import Document
 from .render import render_to_file
+from .svg import render_svg_to_file
 from .validate import validate, validate_file
 
 BOLD, DIM, RED, YELLOW, GREEN, RESET = (
@@ -81,6 +84,7 @@ def cmd_inspect(args) -> int:
 
     selected = any([args.paths, args.rag, args.tools, args.unhandled,
                     args.inferred, args.node])
+    args.summary = False
 
     if args.json:
         out: dict = {}
@@ -149,7 +153,7 @@ def cmd_inspect(args) -> int:
 
     if args.inferred:
         print(f"\n{_paint('Low-trust claims', BOLD)}")
-        findings = g.low_trust(args.threshold)
+        findings = g.low_trust()
         if not findings:
             print("  none")
         for f in findings:
@@ -268,6 +272,14 @@ def cmd_generate(args) -> int:
     return 0
 
 
+def _render(doc, out: Path, orientation: str, theme: str) -> Path:
+    """Format follows the output extension: .svg exports a static diagram,
+    anything else writes the interactive page."""
+    if out.suffix.lower() == ".svg":
+        return render_svg_to_file(doc, out, theme=theme, orientation=orientation)
+    return render_to_file(doc, out, orientation=orientation)
+
+
 def cmd_render(args) -> int:
     doc = Document.load(args.file)
     report = validate(doc.to_dict())
@@ -280,12 +292,50 @@ def cmd_render(args) -> int:
         return 1
 
     out = args.output or Path(args.file).with_suffix(".html")
-    render_to_file(doc, out, orientation=args.orientation)
+    _render(doc, out, args.orientation, args.theme)
     print(f"wrote {out}")
     if args.open:
         import webbrowser
         webbrowser.open(Path(out).resolve().as_uri())
     return 0
+
+
+def cmd_view(args) -> int:
+    """One command from a source tree or a document to a diagram on screen."""
+    target = Path(args.target)
+    if not target.exists():
+        print(f"{target}: no such path", file=sys.stderr)
+        return 1
+
+    if target.is_dir():
+        from .analyze import generate
+        doc, reports = generate(target, name=args.name)
+        print(f"analyzed {len(reports)} file(s) -> {len(doc.nodes)} nodes, "
+              f"{len(doc.edges)} edges")
+        if args.save:
+            doc.save(args.save)
+            print(f"wrote {args.save}")
+    else:
+        doc = Document.load(target)
+
+    report = validate(doc.to_dict())
+    for f in report.errors:
+        print(f"  {_paint('error', RED)} {f.code} {f.message}", file=sys.stderr)
+    if report.errors:
+        return 1
+
+    out = args.output or Path(tempfile.gettempdir()) / f"{_slug(target)}.html"
+    _render(doc, Path(out), "horizontal", args.theme)
+    print(f"wrote {out}")
+    if not args.no_open:
+        import webbrowser
+        webbrowser.open(Path(out).resolve().as_uri())
+    return 0
+
+
+def _slug(path: Path) -> str:
+    stem = path.resolve().name or "workflow"
+    return re.sub(r"[^A-Za-z0-9_.-]+", "-", stem) or "workflow"
 
 
 # ---------------------------------------------------------------------------
@@ -303,13 +353,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     i = sub.add_parser("inspect", help="Explore a workflow and ask behavioral questions.")
     i.add_argument("file", type=Path)
-    i.add_argument("--summary", action="store_true", help="Force the summary alongside other views.")
     i.add_argument("--paths", action="store_true", help="All paths from input to output.")
     i.add_argument("--rag", action="store_true", help="Retrieval surface.")
     i.add_argument("--tools", action="store_true", help="Which agents can invoke which tools.")
     i.add_argument("--unhandled", action="store_true", help="Declared failure modes with no handler.")
     i.add_argument("--inferred", action="store_true", help="AI-inferred claims not yet reviewed.")
-    i.add_argument("--threshold", type=float, default=0.60, help="Confidence floor for --inferred.")
     i.add_argument("--node", metavar="ID", help="Detail for a single node.")
     i.add_argument("--json", action="store_true")
     i.set_defaults(func=cmd_inspect)
@@ -333,9 +381,21 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("-o", "--output", type=Path,
                    help="Output path (defaults to the input with a .html suffix).")
     r.add_argument("--orientation", choices=["horizontal", "vertical"], default="horizontal")
+    r.add_argument("--theme", choices=["light", "dark"], default="light",
+                   help="Colour scheme for .svg output; the HTML page follows the viewer.")
     r.add_argument("--open", action="store_true", help="Open the result in a browser.")
     r.add_argument("--force", action="store_true", help="Render even if validation fails.")
     r.set_defaults(func=cmd_render)
+
+    w = sub.add_parser("view", help="Analyze or open a workflow and show it in a browser.")
+    w.add_argument("target", nargs="?", default=".", type=Path,
+                   help="A project directory to analyze, or an existing .aiflow file.")
+    w.add_argument("-o", "--output", type=Path, help="Where to write the page.")
+    w.add_argument("--save", type=Path, help="Also save the extracted .aiflow document.")
+    w.add_argument("--name", help="Project name, when analyzing a directory.")
+    w.add_argument("--theme", choices=["light", "dark"], default="light")
+    w.add_argument("--no-open", action="store_true", help="Write the page but do not open it.")
+    w.set_defaults(func=cmd_view)
 
     gen = sub.add_parser("generate", help="Extract a .aiflow from a Python project.")
     gen.add_argument("path", nargs="?", default=".", type=Path)

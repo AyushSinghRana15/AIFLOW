@@ -1,0 +1,11 @@
+{
+  "name": "aiflow",
+  "displayName": "AIFLOW",
+  "description": "Map, validate, and review the AI workflow of a codebase using the .aiflow semantic format.",
+  "version": "0.1.0",
+  "author": { "name": "Ayush Singh", "url": "https://github.com/AyushSinghRana15" },
+  "homepage": "https://github.com/AyushSinghRana15/AIFLOW",
+  "repository": "https://github.com/AyushSinghRana15/AIFLOW",
+  "license": "Apache-2.0",
+  "keywords": ["ai", "workflow", "llm", "agents", "rag", "graph", "architecture", "documentation"]
+}
