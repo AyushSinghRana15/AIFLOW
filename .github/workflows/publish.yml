@@ -1,0 +1,81 @@
+name: Publish
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Build and check, but do not upload.
+        type: boolean
+        default: true
+
+jobs:
+  build:
+    name: Build distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install build tooling
+        run: python -m pip install --upgrade pip build twine
+
+      # A release must not ship code the suites have not passed.
+      - name: Conformance suites
+        run: |
+          python -m pip install jsonschema
+          python tests/run_all.py
+
+      - name: Build
+        run: python -m build
+
+      - name: Check metadata
+        run: python -m twine check dist/*
+
+      # The spec artifacts are force-included into the wheel. If that wiring
+      # breaks, an installed package silently loses its schema.
+      - name: Installed package resolves its spec
+        run: |
+          python -m pip install dist/*.whl
+          cd /tmp
+          python -c "import aiflow; assert aiflow.schema()['title'] == 'AIFLOW v1'"
+          aiflow --version
+
+      - name: Version matches the tag
+        if: github.event_name == 'release'
+        run: |
+          python - <<'PY'
+          import os, re, tomllib
+          tag = os.environ["GITHUB_REF_NAME"].lstrip("v")
+          with open("pyproject.toml", "rb") as fh:
+              version = tomllib.load(fh)["project"]["version"]
+          assert version == tag, f"pyproject version {version!r} != tag {tag!r}"
+          print(f"version {version} matches tag")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/aiflow-format
+    permissions:
+      id-token: write        # trusted publishing; no API token is stored
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1

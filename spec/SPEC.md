@@ -153,7 +153,37 @@ version; anything that invalidates a conformant 1.x document requires v2.
 | **1.1** | Added `ai_context.provenance`. A document using it MUST declare `1.1`. |
 | **1.0** | Initial specification. |
 
-## 10. Known limits of v1
+## 10. Governance
+
+AIFLOW is an open specification. The normative artifacts are this document,
+[`aiflow-v1.schema.json`](aiflow-v1.schema.json), and
+[`edge-compatibility.json`](edge-compatibility.json). Implementations MUST load the
+matrix rather than hardcoding it.
+
+**How the specification changes.** Additive changes — a new optional property, a new
+enum member that no conformant document was forbidden to omit — bump the minor version
+and update the schema, this document's version table, the reference implementation's
+model, and [`CONFORMANCE.md`](../docs/CONFORMANCE.md) together. Anything that would
+invalidate a conformant `1.x` document requires v2, and requires discussion before
+implementation.
+
+**What belongs in the specification.** Only the semantic model. Appearance belongs in
+`metadata.layout` or `extensions`, and a reader is free to discard both. The line to
+hold is that `.aiflow` is not a diagram format; the moment layout becomes normative,
+it becomes one.
+
+**What belongs to a layer instead.** The format defines what *can* be said. Which
+component is allowed to say it is a separate question, answered by `provenance`:
+generic static analysis cannot see branching, so a `condition` node with
+`static_analysis` provenance is almost always a guess wearing the wrong label. See
+[`CONFORMANCE.md`](../docs/CONFORMANCE.md) for the obligations this places on writers.
+
+**Extending the reference example.** The compatibility matrix's conformance sweep reads
+the matrix as ground truth, so it stays green even if the matrix is wrong. The
+reference example is the only thing anchoring it to reality. Any change that adds an
+edge type MUST extend that example.
+
+## 11. Known limits of v1
 
 - **Static analysis cannot capture intent.** `ai_context` is where intent lives, and
   it is almost always `ai_inference` — carry confidence and evidence accordingly.

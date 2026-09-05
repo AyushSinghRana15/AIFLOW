@@ -604,7 +604,7 @@ pip install -e .
 python tests/run_all.py
 ```
 
-**934 assertions across seven suites.**
+**953 assertions across seven suites.**
 
 | Suite | Covers |
 |---|---|
@@ -614,7 +614,7 @@ python tests/run_all.py
 | [`test_analyze.py`](tests/test_analyze.py) | Every detection rule, cross-file linking, and that nothing generated carries invented `ai_context` |
 | [`test_adapters.py`](tests/test_adapters.py) | Every LangGraph construct, that non-literal wiring is reported rather than invented, and that a non-framework project is byte-identical with the adapter layer on or off |
 | [`test_semantic.py`](tests/test_semantic.py) | Budget, cache, and enrichment — entirely offline against a fake client, so the suite never spends a rate-limited quota |
-| [`test_docs.py`](tests/test_docs.py) | README links, anchors, generated diagrams, Mermaid syntax, and plugin manifests |
+| [`test_docs.py`](tests/test_docs.py) | README links, anchors, generated diagrams, Mermaid syntax, plugin manifests, and that every diagnostic code the validator emits is documented for implementers |
 
 Diagrams in this README are generated. Regenerate with `python docs/build.py`;
 CI fails if they drift.
@@ -623,6 +623,29 @@ CI fails if they drift.
 > `edge-compatibility.json` — it reads the matrix as ground truth, so it stays green
 > if the matrix itself is wrong. The reference example is the anchor that pins the
 > matrix to reality. If you add an edge type, extend that example too.
+
+## Contributing
+
+AIFLOW is an open specification, not just one implementation.
+
+| | |
+|---|---|
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Setup, layout, and what a good pull request looks like |
+| [`docs/CONFORMANCE.md`](docs/CONFORMANCE.md) | What it takes to implement AIFLOW in another language |
+| [`docs/ADAPTERS.md`](docs/ADAPTERS.md) | Writing a framework adapter |
+| [`spec/SPEC.md#10-governance`](spec/SPEC.md#10-governance) | How the specification changes |
+| [`CHANGELOG.md`](CHANGELOG.md) | What has landed |
+
+The project has one unusual rule, and most of its design follows from it:
+
+> **Never assert more than you can support.** Every claim records how it was learned.
+> A contribution that makes the tool guess while labelling the guess as fact will be
+> sent back, however useful the guess is.
+
+The most self-contained places to start are a **detection signature** (a table edit in
+[`signatures.py`](aiflow/analyze/signatures.py) plus a positive and a negative test)
+and a **framework adapter** ([the guide](docs/ADAPTERS.md); LangGraph is a worked
+example).
 
 ## Roadmap
 
@@ -637,12 +660,16 @@ CI fails if they drift.
 | 7 | Framework adapters — LangGraph ✅, others planned | ✅ |
 | 8 | AI-powered workflow exploration | ✅ |
 | 9 | Git / developer integration | next |
-| 10 | Ecosystem & open specification | next |
+| 10 | Ecosystem & open specification | ✅ |
 
-Phase 6 is the first component permitted to emit `ai_inference` — which is what the
-provenance model was built for, and building it surfaced the one spec change so far:
-`ai_context` needed provenance of its own, added in
+All ten phases are implemented. Phase 6 was the first component permitted to emit
+`ai_inference` — what the provenance model was built for — and building it surfaced the
+one spec change so far: `ai_context` needed provenance of its own, added in
 [1.1](spec/SPEC.md#9-versioning).
+
+Next up is breadth rather than new layers: adapters for LangChain, the OpenAI Agents
+SDK, CrewAI, and LlamaIndex, all of which are self-contained contributions against a
+[documented contract](docs/ADAPTERS.md).
 
 ## License
 

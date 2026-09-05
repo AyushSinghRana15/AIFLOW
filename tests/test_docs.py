@@ -144,13 +144,55 @@ def suite_plugin(r: Results):
                 f"plugin: {skill.parent.name} handles a missing CLI")
 
 
+def suite_project_files(r: Results):
+    """The files that make this an open specification rather than one program."""
+    for name in ("CONTRIBUTING.md", "CHANGELOG.md", "LICENSE",
+                 "docs/CONFORMANCE.md", "docs/ADAPTERS.md",
+                 ".pre-commit-hooks.yaml", "action.yml"):
+        path = ROOT / name
+        r.check(path.is_file() and path.stat().st_size > 200,
+                f"project: {name} is present and substantive")
+
+    for name in ("bug_report.md", "adapter_request.md", "spec_change.md"):
+        path = ROOT / ".github" / "ISSUE_TEMPLATE" / name
+        r.check(path.is_file() and path.read_text().startswith("---"),
+                f"project: the {name} template has frontmatter")
+
+    r.check((ROOT / ".github" / "pull_request_template.md").is_file(),
+            "project: a pull request template is present")
+
+    for name in ("ci.yml", "publish.yml"):
+        r.check((ROOT / ".github" / "workflows" / name).is_file(),
+                f"project: the {name} workflow is present")
+
+    # every AF code the validator can emit must be documented for implementers
+    validator = (ROOT / "aiflow" / "validate.py").read_text()
+    emitted = set(re.findall(r'"(AF\d{3})"', validator))
+    documented = set(re.findall(r"AF\d{3}", (ROOT / "spec" / "SPEC.md").read_text()))
+    documented |= set(re.findall(r"AF\d{3}", (ROOT / "docs" / "CONFORMANCE.md").read_text()))
+    undocumented = sorted(emitted - documented - {"AF001", "AF002"})
+    r.check(not undocumented,
+            "project: every diagnostic code the validator emits is documented",
+            undocumented)
+
+    conformance = (ROOT / "docs" / "CONFORMANCE.md").read_text()
+    for required in ("edge-compatibility.json", "lossless", "provenance"):
+        r.check(required in conformance,
+                f"conformance: the document covers {required}")
+
+    spec = (ROOT / "spec" / "SPEC.md").read_text()
+    r.check("## 10. Governance" in spec, "spec: governance is documented")
+    r.check("| **1.1** |" in spec, "spec: the version table records 1.1")
+
+
 def main() -> int:
     r = Results()
     text = README.read_text()
     for name, suite in (("links", lambda x: suite_links(x, text)),
                         ("mermaid", lambda x: suite_mermaid(x, text)),
                         ("assets", suite_assets),
-                        ("plugin", suite_plugin)):
+                        ("plugin", suite_plugin),
+                        ("project", suite_project_files)):
         print(f"\n{name}")
         suite(r)
 
