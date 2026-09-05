@@ -128,4 +128,4 @@ Point AIFLOW at an AI project and get:
 
 ## License
 
-TBD.
+Apache License 2.0 — see [LICENSE](LICENSE).
