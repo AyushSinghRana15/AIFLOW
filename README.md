@@ -47,7 +47,8 @@ a model reasoning about failure paths cannot.
 | [`spec/aiflow-v1.schema.json`](spec/aiflow-v1.schema.json) | JSON Schema (draft 2020-12) — structural validation |
 | [`spec/edge-compatibility.json`](spec/edge-compatibility.json) | Normative edge/node type matrix — machine-readable |
 | [`examples/rag-support-agent.aiflow`](examples/rag-support-agent.aiflow) | Reference document exercising every node and edge type |
-| [`aiflow/`](aiflow) | Python SDK and CLI — model, validator, graph queries, diff, renderer |
+| [`examples/sample-project/`](examples/sample-project) | A small Python AI app, used as the analyzer's fixture |
+| [`aiflow/`](aiflow) | Python SDK and CLI — model, validator, graph queries, diff, renderer, analyzer |
 | [`tests/`](tests) | Conformance suites |
 
 ## Install
@@ -59,12 +60,40 @@ pip install -e .
 ## Use it
 
 ```bash
+aiflow generate ./my-ai-project -o project.aiflow
 aiflow validate examples/rag-support-agent.aiflow --strict
 aiflow inspect examples/rag-support-agent.aiflow --paths --unhandled
 aiflow render examples/rag-support-agent.aiflow --open
 aiflow init -o project.aiflow
 aiflow diff old.aiflow new.aiflow
 ```
+
+## Generate
+
+```bash
+aiflow generate ./my-ai-project
+```
+
+Walks the project's syntax tree and extracts agents, LLM calls, prompts, tools,
+retrievers, vector stores, and the data flow between them — with a source reference
+and a confidence on every claim.
+
+```
+$ aiflow generate examples/sample-project
+wrote project.aiflow
+  analyzed 8 file(s) -> 11 nodes, 10 edges
+  agent=2, input=1, llm=2, output=1, prompt=2, retriever=1, tool=1, vector_store=1
+  note branching is not extracted by static analysis; add condition nodes by hand
+```
+
+**What it will not do.** It reports what the syntax tree shows and nothing else. A
+class becomes an `agent` because it contains an LLM invocation, never because it is
+called `SupervisorAgent`. Two components are linked by `passes` only when one call
+provably consumes a value another produced — not because they sit in the same
+function. And it emits no `ai_context` at all: intent, summaries, and failure modes
+are the semantic analyzer's job, and asserting them here would put guesses behind a
+label that means *parsed*. Where it cannot see something — runtime-assembled graphs,
+branching — it says so rather than inventing it.
 
 ## Render
 
@@ -135,13 +164,15 @@ print(g.low_trust())
 python3 tests/run_all.py
 ```
 
-640 assertions across three suites. The matrix suite sweeps all 486
+687 assertions across four suites. The matrix suite sweeps all 486
 `edge_type × source_type × target_type` combinations against the compatibility
 matrix in both directions, and runs 25 targeted mutations each expected to raise a
 specific diagnostic. The SDK suite covers lossless round-tripping, graph queries,
 diff semantics, and CLI exit codes. The render suite covers layering (including
 cyclic workflows), determinism, and that the page stays self-contained and escapes
-untrusted document content.
+untrusted document content. The analyzer suite pins each detection rule, the
+cross-file links, and the boundary above — including a test asserting that nothing
+generated ever carries invented `ai_context`.
 
 ## Two things that make this different
 
@@ -175,8 +206,8 @@ A document is conformant only when it passes both. Diagnostic codes are listed i
 | 2 | JSON Schema | ✅ |
 | 3 | Python SDK | ✅ |
 | 4 | Interactive renderer | ✅ |
-| 5 | Python code analyzer | next |
-| 6 | AI semantic analyzer | |
+| 5 | Python code analyzer | ✅ |
+| 6 | AI semantic analyzer | next |
 | 7 | Framework adapters — LangGraph → LangChain → OpenAI Agents SDK → CrewAI → LlamaIndex | |
 | 8 | AI-powered workflow exploration | |
 | 9 | Git / developer integration | |
@@ -191,9 +222,7 @@ A document is conformant only when it passes both. Diagnostic codes are listed i
 | `aiflow inspect` | ✅ |
 | `aiflow diff` | ✅ |
 | `aiflow render` | ✅ |
-| `aiflow generate` | phases 5–7 — exits 2 |
-
-`generate` exits 2 with an explanation rather than pretending to work.
+| `aiflow generate` | ✅ — plain Python; framework adapters are phase 7 |
 
 ## v1 success criteria
 

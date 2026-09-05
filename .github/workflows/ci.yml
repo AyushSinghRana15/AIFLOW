@@ -44,6 +44,12 @@ jobs:
       - name: Conformance suites
         run: python tests/run_all.py
 
+      # generate -> validate is the round trip the whole toolchain rests on
+      - name: Analyzer round trip
+        run: |
+          python -m aiflow.cli generate examples/sample-project -o /tmp/gen.aiflow
+          python -m aiflow.cli validate /tmp/gen.aiflow --strict
+
   package:
     name: build and install
     runs-on: ubuntu-latest

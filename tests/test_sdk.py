@@ -229,9 +229,7 @@ def suite_cli(r: Results):
     r.check("UNHANDLED" in out or "unhandled" in out.lower(),
             "cli: node detail flags its unhandled failure")
 
-    code, _, err = run_cli("generate", ".")
-    r.eq(code, 2, "cli: generate exits 2 rather than pretending to work")
-    r.check("not implemented" in err, "cli: generate says so plainly")
+    # generate / render behaviour lives in test_analyze.py and test_render.py
 
 
 def suite_spec(r: Results):

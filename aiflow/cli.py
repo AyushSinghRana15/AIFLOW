@@ -223,6 +223,51 @@ def cmd_diff(args) -> int:
     return 1 if (result and args.exit_code) else 0
 
 
+def cmd_generate(args) -> int:
+    from .analyze import generate
+
+    root = Path(args.path)
+    if not root.exists():
+        print(f"{root}: no such path", file=sys.stderr)
+        return 1
+
+    doc, reports = generate(root, name=args.name)
+    report = validate(doc.to_dict())
+
+    out = args.output or Path("project.aiflow")
+    if out.exists() and not args.force:
+        print(f"{out} already exists (use --force to overwrite)", file=sys.stderr)
+        return 1
+    doc.save(out)
+
+    counts: dict[str, int] = {}
+    for n in doc.nodes:
+        counts[n.type] = counts.get(n.type, 0) + 1
+    print(f"wrote {out}")
+    print(f"  analyzed {len(reports)} file(s) -> {len(doc.nodes)} nodes, "
+          f"{len(doc.edges)} edges")
+    print("  " + ", ".join(f"{k}={v}" for k, v in sorted(counts.items())))
+
+    if report.errors:
+        print(f"\n  {len(report.errors)} validation error(s):", file=sys.stderr)
+        for f in report.errors[:5]:
+            print(f"    {f}", file=sys.stderr)
+        return 1
+    for f in report.warnings:
+        print(f"  {_paint('warning', YELLOW)} {f.code} {f.message}")
+
+    # Say plainly what static analysis could not see, rather than letting an
+    # incomplete graph read as a complete one.
+    if not any(n.type == "input" for n in doc.nodes):
+        print(f"  {_paint('note', DIM)} no entrypoint found; the graph has no "
+              f"declared start. Add one by hand, or point --path at the module "
+              f"that receives requests.")
+    if not any(n.type == "condition" for n in doc.nodes):
+        print(f"  {_paint('note', DIM)} branching is not extracted by static "
+              f"analysis; add condition nodes by hand where the workflow routes.")
+    return 0
+
+
 def cmd_render(args) -> int:
     doc = Document.load(args.file)
     report = validate(doc.to_dict())
@@ -241,12 +286,6 @@ def cmd_render(args) -> int:
         import webbrowser
         webbrowser.open(Path(out).resolve().as_uri())
     return 0
-
-
-def cmd_unimplemented(args) -> int:
-    print(f"'aiflow {args.command}' is not implemented yet.\n"
-          f"It lands in a later phase of the roadmap; see README.md.", file=sys.stderr)
-    return 2
 
 
 # ---------------------------------------------------------------------------
@@ -298,9 +337,13 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--force", action="store_true", help="Render even if validation fails.")
     r.set_defaults(func=cmd_render)
 
-    gen = sub.add_parser("generate", help="Extract a .aiflow from a project (phase 5-7).")
-    gen.add_argument("args", nargs="*")
-    gen.set_defaults(func=cmd_unimplemented)
+    gen = sub.add_parser("generate", help="Extract a .aiflow from a Python project.")
+    gen.add_argument("path", nargs="?", default=".", type=Path)
+    gen.add_argument("-o", "--output", type=Path,
+                     help="Output path (defaults to project.aiflow).")
+    gen.add_argument("--name", help="Project name (defaults to the directory name).")
+    gen.add_argument("--force", action="store_true")
+    gen.set_defaults(func=cmd_generate)
 
     return p
 
