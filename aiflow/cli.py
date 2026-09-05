@@ -291,6 +291,65 @@ def _render(doc, out: Path, orientation: str, theme: str) -> Path:
     return render_to_file(doc, out, orientation=orientation)
 
 
+def cmd_ask(args) -> int:
+    from .semantic import BudgetExceeded, Cache, ClientError, Ledger, MissingKey
+    from .semantic.ask import answer_from_graph, ask
+    from .semantic.client import OpenRouterClient
+
+    doc = Document.load(args.file)
+    question = " ".join(args.question).strip()
+    if not question:
+        print("ask what?", file=sys.stderr)
+        return 1
+
+    # Try the exact path first; only reach for a model if the graph cannot answer.
+    computed = answer_from_graph(doc, question)
+    if computed is None and args.no_model:
+        result = ask(doc, question, allow_model=False)
+    elif computed is not None:
+        result = computed
+    else:
+        try:
+            client = OpenRouterClient.from_env(args.model)
+        except MissingKey as exc:
+            print(str(exc), file=sys.stderr)
+            print("\nOr ask a question the graph can answer directly "
+                  "(paths, retrieval, tools, failures, a component).", file=sys.stderr)
+            return 1
+        try:
+            result = ask(doc, question, client=client,
+                         ledger=Ledger.open(), cache=Cache.open(enabled=not args.no_cache))
+        except BudgetExceeded as exc:
+            print(f"{_paint('budget', YELLOW)} {exc}", file=sys.stderr)
+            return 1
+        except ClientError as exc:
+            print(f"{_paint('error', RED)} {exc}", file=sys.stderr)
+            return 1
+
+    if args.json:
+        print(json.dumps({"question": question, "answer": result.text,
+                          "source": result.source, "computed": result.computed,
+                          "cites": result.cites, "confidence": result.confidence,
+                          "grounded": result.grounded,
+                          "calls_made": result.calls_made}, indent=2))
+        return 0 if result.grounded else 2
+
+    print()
+    print(result.text)
+    print()
+    if result.computed:
+        print(f"  {_paint('computed from the graph', DIM)} — exact, no model involved")
+    else:
+        tag = "inferred" if result.grounded else "not grounded in the document"
+        conf = f", confidence {result.confidence}" if result.confidence is not None else ""
+        print(f"  {_paint(f'{tag} by {result.source}{conf}', YELLOW)}")
+        if result.cites:
+            print(f"  {_paint('cites: ' + ', '.join(result.cites), DIM)}")
+        if result.calls_made == 0:
+            print(f"  {_paint('served from cache', DIM)}")
+    return 0 if result.grounded else 2
+
+
 def cmd_enrich(args) -> int:
     from .semantic import (BudgetExceeded, Cache, ClientError, Ledger,
                            MissingKey, OpenRouterClient, enrich)
@@ -469,6 +528,16 @@ def build_parser() -> argparse.ArgumentParser:
     w.add_argument("--theme", choices=["light", "dark"], default="light")
     w.add_argument("--no-open", action="store_true", help="Write the page but do not open it.")
     w.set_defaults(func=cmd_view)
+
+    a = sub.add_parser("ask", help="Ask a question about a workflow.")
+    a.add_argument("file", type=Path)
+    a.add_argument("question", nargs="+")
+    a.add_argument("--no-model", action="store_true",
+                   help="Only answer what the graph can compute exactly.")
+    a.add_argument("--no-cache", action="store_true")
+    a.add_argument("--model", help="OpenRouter model id.")
+    a.add_argument("--json", action="store_true")
+    a.set_defaults(func=cmd_ask)
 
     en = sub.add_parser("enrich", help="Add inferred semantics to a document using a model.")
     en.add_argument("file", nargs="?", type=Path)

@@ -84,6 +84,7 @@ aiflow --version
 | [`aiflow generate`](#aiflow-generate) | Extract a `.aiflow` from a Python project |
 | [`aiflow validate`](#aiflow-validate) | Check a document, structurally and semantically |
 | [`aiflow inspect`](#aiflow-inspect) | Ask behavioral questions about a workflow |
+| [`aiflow ask`](#aiflow-ask) | Ask a question about a workflow |
 | [`aiflow enrich`](#aiflow-enrich) | Add inferred semantics with a model, under a call budget |
 | [`aiflow render`](#aiflow-render) | Write an interactive page or a static SVG |
 | [`aiflow diff`](#aiflow-diff) | Compare two documents semantically |
@@ -210,6 +211,44 @@ Unhandled failure modes
   agent_supervisor: Router LLM times out; no fallback route is configured.
   retr_kb: Vector store unreachable; the call raises and the graph aborts without a degraded path.
 ```
+
+### `aiflow ask`
+
+```bash
+aiflow ask project.aiflow "show me all paths to the final response"
+aiflow ask project.aiflow "what happens if vs_kb fails?"
+aiflow ask project.aiflow "which claims were inferred rather than parsed?"
+```
+
+**Exact answers first.** Most of what people actually ask — where is RAG used, which
+agents call tools, what breaks if this store fails — is a graph query with a precise
+answer. Those are computed directly:
+
+```
+$ aiflow ask project.aiflow "what happens if vs_kb fails?"
+
+If vs_kb (vector_store) fails, 5 component(s) are affected:
+  retrieve (retriever)
+  answer (agent)
+  llm_answer (llm)
+  ...
+The failure reaches out_answer_result, so there is no alternate path to a result.
+
+  computed from the graph — exact, no model involved
+```
+
+Only questions the graph *cannot* answer reach a model, and those come back labelled,
+cited, and with a `grounded` flag the model sets to `false` when the document does not
+contain the answer:
+
+```
+  inferred by minimax/minimax-m3:free, confidence 0.7
+  cites: llm_classify, llm_answer, classify, answer
+```
+
+Citations to ids that are not in the document are stripped — an uncited claim is a
+guess, and a fabricated citation is worse. `--no-model` restricts it to the exact
+path; `--json` is for tooling and exits `2` when the answer is not grounded.
 
 ### `aiflow enrich`
 
@@ -518,7 +557,7 @@ pip install -e .
 python tests/run_all.py
 ```
 
-**850 assertions across seven suites.**
+**911 assertions across seven suites.**
 
 | Suite | Covers |
 |---|---|
@@ -549,8 +588,8 @@ CI fails if they drift.
 | 5 | Python code analyzer | ✅ |
 | 6 | AI semantic analyzer | ✅ |
 | 7 | Framework adapters — LangGraph ✅, others planned | ✅ |
-| 8 | AI-powered workflow exploration | next |
-| 9 | Git / developer integration | |
+| 8 | AI-powered workflow exploration | ✅ |
+| 9 | Git / developer integration | next |
 | 10 | Ecosystem & open specification | |
 
 Phase 6 is the first component permitted to emit `ai_inference` — which is what the

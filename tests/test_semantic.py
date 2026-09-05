@@ -22,6 +22,7 @@ os.environ["AIFLOW_HOME"] = _TMP_HOME          # before any budget import resolv
 from aiflow import Document, validate                                   # noqa: E402
 from aiflow.graph import Graph                                          # noqa: E402
 from aiflow.semantic import BudgetExceeded, Cache, Ledger, enrich, plan  # noqa: E402
+from aiflow.semantic.ask import answer_from_graph, ask, digest             # noqa: E402
 from aiflow.semantic.client import (MissingKey, OpenRouterClient,        # noqa: E402
                                     _redact, extract_json)
 
@@ -302,13 +303,119 @@ def suite_robustness(r: Results):
          "robust: even a thin response yields a valid document")
 
 
+def suite_ask_graph(r: Results):
+    """Questions the graph can answer exactly must never reach a model."""
+    doc = Document.load(GOLDEN)
+
+    cases = [
+        ("show me all paths to the final response", "paths"),
+        ("where is RAG used?", "rag"),
+        ("which agents use external tools?", "tools"),
+        ("find missing error handling", "failures"),
+        ("which claims were inferred?", "trust"),
+        ("what happens if vs_kb fails?", "impact"),
+        ("explain the retr_kb component", "describe"),
+        ("give me a summary of this workflow", "summary"),
+    ]
+    for question, expected in cases:
+        a = answer_from_graph(doc, question)
+        r.check(a is not None, f"ask: {expected} question is recognised", question)
+        if a:
+            r.eq(a.matched, expected, f"ask: routed to the {expected} query")
+            r.eq(a.calls_made, 0, f"ask: the {expected} answer costs no call")
+            r.eq(a.source, "graph", f"ask: the {expected} answer is labelled computed")
+            r.check(a.text.strip(), f"ask: the {expected} answer is not empty")
+
+    a = answer_from_graph(doc, "what happens if vs_kb fails?")
+    r.check("out_response" in a.text,
+            "ask: an impact answer names the output the failure reaches")
+    r.check("vs_kb" in a.cites, "ask: an impact answer cites the component")
+
+    r.check(answer_from_graph(doc, "explain the Knowledge-base retriever") is not None,
+            "ask: a component can be named rather than given by id")
+    r.check(answer_from_graph(doc, "what happens if ghost_component fails?") is None,
+            "ask: an unknown component falls through rather than answering wrongly")
+    r.check(answer_from_graph(doc, "would this be cheaper on a different provider?") is None,
+            "ask: an open question falls through to the model path")
+
+    a = ask(doc, "is this workflow well designed?", allow_model=False)
+    r.check(not a.grounded and "does not match" in a.text,
+            "ask: --no-model says so rather than guessing")
+    r.eq(a.calls_made, 0, "ask: --no-model costs nothing")
+
+
+def suite_ask_model(r: Results):
+    doc = Document.load(GOLDEN)
+
+    def respond(_user):
+        return json.dumps({
+            "answer": "Because the router is cheap.",
+            "cites": ["agent_supervisor", "not_a_real_id"],
+            "confidence": 1.7, "grounded": True}), "stop"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        os.environ["AIFLOW_HOME"] = tmp
+        client = FakeClient(respond)
+        cache = Cache.open()
+        question = "why does this design use two different models?"
+
+        a = ask(doc, question, client=client, ledger=Ledger.open(limit=9), cache=cache)
+        r.eq(a.calls_made, 1, "ask: an open question costs one call")
+        r.eq(a.source, client.model, "ask: the answer is attributed to the model")
+        r.eq(a.cites, ["agent_supervisor"],
+             "ask: a citation to something not in the document is dropped")
+        r.check(a.confidence is not None and a.confidence <= 1.0,
+                "ask: confidence is clamped to the valid range", a.confidence)
+
+        before = len(client.calls)
+        again = ask(doc, question, client=client, ledger=Ledger.open(limit=9), cache=cache)
+        r.eq(len(client.calls), before, "ask: the same question re-runs from cache")
+        r.eq(again.calls_made, 0, "ask: and reports zero calls")
+
+        ungrounded = FakeClient(lambda u: (json.dumps(
+            {"answer": "The document does not say.", "grounded": False,
+             "confidence": 0.9}), "stop"))
+        a = ask(doc, "what is the p99 latency?", client=ungrounded,
+                ledger=Ledger.open(limit=9), cache=Cache.open(enabled=False))
+        r.check(not a.grounded,
+                "ask: an ungrounded answer is flagged rather than presented as fact")
+
+        truncated = FakeClient(lambda u: ('{"answer": "cut', "length"))
+        a = ask(doc, "explain everything in detail please", client=truncated,
+                ledger=Ledger.open(limit=9), cache=Cache.open(enabled=False))
+        r.check("truncated" in a.text and not a.grounded,
+                "ask: a truncated reply is reported as truncation")
+
+        tight = Ledger.open(limit=1)
+        tight.record(1)
+        starved = FakeClient()
+        raised = False
+        try:
+            ask(doc, "an entirely novel open question about tradeoffs", client=starved,
+                ledger=tight, cache=Cache.open(enabled=False))
+        except BudgetExceeded:
+            raised = True
+        r.check(raised, "ask: the budget is enforced on the model path too")
+        r.eq(len(starved.calls), 0, "ask: and refused before the call")
+    os.environ["AIFLOW_HOME"] = _TMP_HOME
+
+    d = digest(doc)
+    r.eq(len(d["nodes"]), len(doc.nodes), "digest: every node is described")
+    r.eq(len(d["edges"]), len(doc.edges), "digest: every edge is described")
+    r.check(len(json.dumps(d)) < 20000, "digest: the payload stays bounded")
+    inferred = [n for n in d["nodes"] if n.get("context", {}).get("_note")]
+    r.check(all("ai_inference" in n["context"]["_note"] for n in inferred),
+            "digest: inferred context is marked as such for the model")
+
+
 # ---------------------------------------------------------------------------
 def main() -> int:
     r = Results()
     for name, suite in (("budget", suite_budget), ("cache", suite_cache),
                         ("client", suite_client), ("plan", suite_plan),
                         ("enrich", suite_enrich), ("spend", suite_spend),
-                        ("robustness", suite_robustness)):
+                        ("robustness", suite_robustness),
+                        ("ask-graph", suite_ask_graph), ("ask-model", suite_ask_model)):
         print(f"\n{name}")
         suite(r)
 
