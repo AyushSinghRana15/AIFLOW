@@ -172,16 +172,19 @@ class AIContext(_Base):
     invariants: list[str] | None = None
     side_effects: list[str] | None = None
     notes: str | None = None
+    provenance: "Provenance | None" = None
 
     @classmethod
     def from_dict(cls, d: dict) -> "AIContext":
         return cls(summary=d.get("summary"), intent=d.get("intent"),
                    failure_modes=_many(d, "failure_modes", FailureMode),
                    invariants=d.get("invariants"), side_effects=d.get("side_effects"),
-                   notes=d.get("notes"))
+                   notes=d.get("notes"),
+                   provenance=_one(d, "provenance", Provenance))
 
     def to_dict(self) -> dict:
-        return _pack(summary=self.summary, intent=self.intent,
+        return _pack(provenance=self.provenance.to_dict() if self.provenance else None,
+                     summary=self.summary, intent=self.intent,
                      failure_modes=_dump(self.failure_modes), invariants=self.invariants,
                      side_effects=self.side_effects, notes=self.notes)
 

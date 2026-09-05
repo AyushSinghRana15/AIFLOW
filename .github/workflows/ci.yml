@@ -54,6 +54,15 @@ jobs:
       - name: README diagrams are current
         run: python docs/build.py --check
 
+      # The semantic analyzer must never need a key or a network call to be tested,
+      # and must never spend quota from CI.
+      - name: Semantic analyzer stays offline
+        env:
+          OPENROUTER_API_KEY: ""
+        run: |
+          python -m aiflow.cli enrich examples/rag-support-agent.aiflow --dry-run
+          python -m aiflow.cli enrich --status
+
       - name: Plugin manifests are well formed
         run: |
           python - <<'PY'

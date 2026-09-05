@@ -86,6 +86,12 @@ hallucinated structure distinguishable from parsed structure.
 `reviewed_by` promotes a human-confirmed inference without rewriting its `method`,
 so the audit trail survives review.
 
+**`ai_context` carries its own provenance** (added in 1.1). Semantics are usually
+inferred while the element carrying them was parsed from code, so the two are
+recorded separately. Enriching a statically-analysed node therefore never has to
+downgrade the node's own claim, and a reader can always tell which half of an
+element is fact and which half is inference.
+
 ## 6. Source mapping
 
 `source_ref` maps any element back to code: `file`, `start_line`, `end_line`,
@@ -141,6 +147,11 @@ A document is **conformant** only when it passes both.
 `version` matches `^1\.[0-9]+$`. A v1 reader MUST accept any `1.x` document and MUST
 ignore unrecognized keys inside `extensions`. Additive changes bump the minor
 version; anything that invalidates a conformant 1.x document requires v2.
+
+| Version | Change |
+|---|---|
+| **1.1** | Added `ai_context.provenance`. A document using it MUST declare `1.1`. |
+| **1.0** | Initial specification. |
 
 ## 10. Known limits of v1
 

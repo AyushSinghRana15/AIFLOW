@@ -15,7 +15,7 @@
     "version": {
       "type": "string",
       "pattern": "^1\\.[0-9]+$",
-      "description": "Spec version this document conforms to. A v1 reader MUST accept any 1.x document and MUST ignore unknown properties inside 'extensions'."
+      "description": "Spec version this document conforms to. A v1 reader MUST accept any 1.x document and MUST ignore unknown properties inside 'extensions'. 1.1 added ai_context.provenance; documents using it declare 1.1."
     },
     "project": { "$ref": "#/$defs/project" },
     "nodes": {
@@ -217,6 +217,10 @@
       "additionalProperties": false,
       "description": "Natural-language semantics attached to a node or edge. This is the layer that answers questions like 'what happens if the vector DB fails?' without re-reading the code.",
       "properties": {
+        "provenance": {
+          "$ref": "#/$defs/provenance",
+          "$comment": "Added in 1.1. Semantics are frequently inferred while the element carrying them was parsed, so ai_context records how *it* was learned, independently of its parent's provenance. Without this, enriching a statically-analysed node would have to overwrite a firm claim with a softer one."
+        },
         "summary": {
           "type": "string",
           "description": "One-line description of what this component does."

@@ -21,7 +21,7 @@ __all__ = ["OpenRouterClient", "ClientError", "MissingKey",
 ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
 ENV_KEY = "OPENROUTER_API_KEY"
 ENV_MODEL = "AIFLOW_MODEL"
-DEFAULT_MODEL = "deepseek/deepseek-chat-v3-0324:free"
+DEFAULT_MODEL = "minimax/minimax-m3:free"
 REFERER = "https://github.com/AyushSinghRana15/AIFLOW"
 
 _KEY_PATTERN = re.compile(r"sk-or-[A-Za-z0-9\-_]+")
@@ -57,8 +57,14 @@ class OpenRouterClient:
             )
         return cls(api_key=key, model=model or os.environ.get(ENV_MODEL) or DEFAULT_MODEL)
 
-    def complete(self, system: str, user: str, *, max_tokens: int = 4000,
-                 temperature: float = 0.0) -> str:
+    def complete(self, system: str, user: str, *, max_tokens: int = 8000,
+                 temperature: float = 0.0) -> tuple[str, str | None]:
+        """Return (content, finish_reason).
+
+        `finish_reason` matters: a response cut off at the token limit is
+        truncated JSON, which is a different problem from a model that ignored
+        the format instruction, and deserves a different message.
+        """
         body = json.dumps({
             "model": self.model,
             "temperature": temperature,
@@ -103,7 +109,8 @@ class OpenRouterClient:
             raise ClientError(f"Could not reach OpenRouter: {_redact(str(exc.reason))}") from None
 
         try:
-            return payload["choices"][0]["message"]["content"]
+            choice = payload["choices"][0]
+            return choice["message"]["content"], choice.get("finish_reason")
         except (KeyError, IndexError, TypeError):
             raise ClientError(
                 f"Unexpected response shape from OpenRouter: "

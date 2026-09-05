@@ -48,6 +48,10 @@ class Finding:
     subject: str
     detail: str
     source: str | None = None
+    inferred: bool = False
+    """True when the observation rests on ai_context a model produced rather
+    than on anything parsed from code. Consumers should present the two
+    differently; collapsing them is how inferred structure gets trusted."""
 
 
 class Graph:
@@ -190,10 +194,13 @@ class Graph:
                     + self.doc.registry("data_sources"))
         for item in carriers:
             ctx = getattr(item, "ai_context", None)
+            inferred = bool(ctx and ctx.provenance and ctx.provenance.is_inferred
+                            and not ctx.provenance.reviewed_by)
             for fm in (ctx.failure_modes if ctx and ctx.failure_modes else ()):
                 if fm.handled is False or (fm.handled is None and not fm.handler_node):
                     out.append(Finding("unhandled_failure", item.id, fm.description,
-                                       str(fm.source) if fm.source else None))
+                                       str(fm.source) if fm.source else None,
+                                       inferred=inferred))
         return out
 
     def impact_of(self, node_id: str) -> list[Node]:
@@ -220,18 +227,23 @@ class Graph:
                     for k in ("prompts", "models", "tools", "data_sources")]
         for kind, items in buckets:
             for item in items:
-                p = getattr(item, "provenance", None)
-                if p is None or not p.is_inferred or p.reviewed_by:
-                    continue
-                conf = p.confidence
-                reasons = []
-                if conf is not None and conf < threshold:
-                    reasons.append(f"confidence {conf}")
-                if not p.evidence:
-                    reasons.append("no evidence")
-                if reasons:
-                    out.append(Finding("low_trust", f"{kind}:{item.id}",
-                                       "; ".join(reasons), p.notes))
+                # An element's own provenance and its ai_context's provenance are
+                # separate claims; either can be the inferred one.
+                for label, p in ((kind, getattr(item, "provenance", None)),
+                                 (f"{kind}.ai_context",
+                                  getattr(getattr(item, "ai_context", None),
+                                          "provenance", None))):
+                    if p is None or not p.is_inferred or p.reviewed_by:
+                        continue
+                    conf = p.confidence
+                    reasons = []
+                    if conf is not None and conf < threshold:
+                        reasons.append(f"confidence {conf}")
+                    if not p.evidence:
+                        reasons.append("no evidence")
+                    if reasons:
+                        out.append(Finding("low_trust", f"{label}:{item.id}",
+                                           "; ".join(reasons), p.notes, inferred=True))
         return out
 
     # -- summary ----------------------------------------------------------

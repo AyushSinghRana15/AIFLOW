@@ -84,6 +84,7 @@ aiflow --version
 | [`aiflow generate`](#aiflow-generate) | Extract a `.aiflow` from a Python project |
 | [`aiflow validate`](#aiflow-validate) | Check a document, structurally and semantically |
 | [`aiflow inspect`](#aiflow-inspect) | Ask behavioral questions about a workflow |
+| [`aiflow enrich`](#aiflow-enrich) | Add inferred semantics with a model, under a call budget |
 | [`aiflow render`](#aiflow-render) | Write an interactive page or a static SVG |
 | [`aiflow diff`](#aiflow-diff) | Compare two documents semantically |
 | [`aiflow init`](#aiflow-init) | Start a document by hand |
@@ -185,6 +186,72 @@ Unhandled failure modes
   agent_supervisor: Router LLM times out; no fallback route is configured.
   retr_kb: Vector store unreachable; the call raises and the graph aborts without a degraded path.
 ```
+
+### `aiflow enrich`
+
+The static analyzer sees structure but not intent. This is the one component
+permitted to guess — and everything about it is arranged so the guess stays
+labelled.
+
+```bash
+export OPENROUTER_API_KEY='sk-or-...'      # from https://openrouter.ai/keys
+aiflow enrich project.aiflow --dry-run     # what would it cost?
+aiflow enrich project.aiflow
+```
+
+```
+$ aiflow enrich project.aiflow
+wrote project.aiflow
+  enriched 8 node(s) in 2 batch(es)
+  2 API call(s), 0 from cache; 48 of 50 left today
+  note every added description is ai_inference — review with: aiflow inspect project.aiflow --inferred
+```
+
+**Cost control is structural**, because free tiers are a hard limit:
+
+| Mechanism | Effect |
+|---|---|
+| **Batching** | One request covers many nodes. An 11-node workflow costs 2 calls, not 11. |
+| **Caching** | Responses are keyed by exact content, so re-running an unchanged workflow costs **zero**. A reworded prompt invalidates the key rather than silently reusing an old answer. |
+| **Ledger** | A persistent per-day counter refuses the call that *would* cross the limit, instead of discovering it from a `429`. |
+
+```bash
+aiflow enrich --status                     # API calls today: 2 of 50 (48 left)
+aiflow enrich doc.aiflow --batches 1       # process one batch and stop
+AIFLOW_DAILY_LIMIT=200 aiflow enrich doc.aiflow
+```
+
+**What it writes, and what it refuses to write.** Every description lands in
+`ai_context` with its *own* `provenance` — method `ai_inference`, a required
+confidence, and the model id:
+
+```json
+"ai_context": {
+  "provenance": { "method": "ai_inference", "confidence": 0.85,
+                  "generator": { "model": "minimax/minimax-m3:free" } },
+  "summary": "Embeds the query and pulls the most similar support articles.",
+  "failure_modes": [{ "description": "The retriever returns documents with missing ids…" }]
+}
+```
+
+The node's own `provenance` stays `static_analysis`. That separation is the whole
+point: enriching a parsed node must never downgrade it to a guess. It also means
+
+- a model-supplied `handled: true` on a failure mode is **discarded** — it cannot see
+  error handling from a graph, so it is not allowed to claim it;
+- a node the model invents is dropped;
+- an unstated confidence is treated as low, never high;
+- existing context is never overwritten without `--overwrite`, so a human correction
+  survives a re-run.
+
+Review what it produced with `aiflow inspect --inferred`. Findings that rest on
+inferred context are tagged `[inferred]` wherever they surface.
+
+> **Configuration.** `OPENROUTER_API_KEY` (required), `AIFLOW_MODEL` (default a free
+> model — free ids change, so check [openrouter.ai/models?q=free](https://openrouter.ai/models?q=free)),
+> `AIFLOW_DAILY_LIMIT` (default 50), `AIFLOW_HOME` (default `~/.aiflow`, holds the
+> ledger and cache). The key is read from the environment only — never written to
+> disk, never part of a cache key, and redacted from every error this tool raises.
 
 ### `aiflow render`
 
@@ -375,6 +442,7 @@ flowchart LR
 | [`aiflow/validate.py`](aiflow/validate.py) | L1 + L2 validation |
 | [`aiflow/graph.py`](aiflow/graph.py) | Traversal and behavioral queries |
 | [`aiflow/analyze/`](aiflow/analyze) | Python source → document |
+| [`aiflow/semantic/`](aiflow/semantic) | Model-inferred semantics, with budget and cache |
 | [`aiflow/layout.py`](aiflow/layout.py) | Deterministic layered layout |
 | [`aiflow/render.py`](aiflow/render.py) · [`svg.py`](aiflow/svg.py) | Interactive page · static diagram |
 | [`aiflow/diff.py`](aiflow/diff.py) | Semantic comparison |
@@ -425,7 +493,7 @@ pip install -e .
 python tests/run_all.py
 ```
 
-**710 assertions across four suites.**
+**806 assertions across six suites.**
 
 | Suite | Covers |
 |---|---|
@@ -433,6 +501,8 @@ python tests/run_all.py
 | [`test_sdk.py`](tests/test_sdk.py) | Lossless round-tripping, graph queries, diff semantics, CLI exit codes |
 | [`test_render.py`](tests/test_render.py) | Layering (including cyclic workflows), determinism, SVG output, and that the page stays self-contained and escapes untrusted content |
 | [`test_analyze.py`](tests/test_analyze.py) | Every detection rule, cross-file linking, and that nothing generated carries invented `ai_context` |
+| [`test_semantic.py`](tests/test_semantic.py) | Budget, cache, and enrichment — entirely offline against a fake client, so the suite never spends a rate-limited quota |
+| [`test_docs.py`](tests/test_docs.py) | README links, anchors, generated diagrams, Mermaid syntax, and plugin manifests |
 
 Diagrams in this README are generated. Regenerate with `python docs/build.py`;
 CI fails if they drift.
@@ -451,14 +521,16 @@ CI fails if they drift.
 | 3 | Python SDK | ✅ |
 | 4 | Interactive renderer | ✅ |
 | 5 | Python code analyzer | ✅ |
-| 6 | AI semantic analyzer | next |
-| 7 | Framework adapters — LangGraph → LangChain → OpenAI Agents SDK → CrewAI → LlamaIndex | |
+| 6 | AI semantic analyzer | ✅ |
+| 7 | Framework adapters — LangGraph → LangChain → OpenAI Agents SDK → CrewAI → LlamaIndex | next |
 | 8 | AI-powered workflow exploration | |
 | 9 | Git / developer integration | |
 | 10 | Ecosystem & open specification | |
 
 Phase 6 is the first component permitted to emit `ai_inference` — which is what the
-provenance model was built for.
+provenance model was built for, and building it surfaced the one spec change so far:
+`ai_context` needed provenance of its own, added in
+[1.1](spec/SPEC.md#9-versioning).
 
 ## License
 

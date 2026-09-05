@@ -149,7 +149,8 @@ def cmd_inspect(args) -> int:
             print("  none declared")
         for f in findings:
             loc = f"  {DIM}({f.source}){RESET}" if f.source and _color() else ""
-            print(f"  {_paint(f.subject, YELLOW)}: {f.detail}{loc}")
+            tag = f" {_paint('[inferred]', DIM)}" if f.inferred else ""
+            print(f"  {_paint(f.subject, YELLOW)}{tag}: {f.detail}{loc}")
 
     if args.inferred:
         print(f"\n{_paint('Low-trust claims', BOLD)}")
@@ -280,6 +281,68 @@ def _render(doc, out: Path, orientation: str, theme: str) -> Path:
     return render_to_file(doc, out, orientation=orientation)
 
 
+def cmd_enrich(args) -> int:
+    from .semantic import (BudgetExceeded, Cache, ClientError, Ledger,
+                           MissingKey, OpenRouterClient, enrich)
+
+    ledger = Ledger.open(args.limit_per_day)
+    if args.status:
+        print(f"API calls today: {ledger.used_today()} of {ledger.limit} "
+              f"({ledger.remaining()} left)")
+        print(f"state: {ledger.path}")
+        return 0
+
+    doc = Document.load(args.file)
+    cache = Cache.open(enabled=not args.no_cache)
+
+    if args.dry_run:
+        result = enrich(doc, cache=cache, overwrite=args.overwrite,
+                        dry_run=True, limit=args.batches)
+        for note in result.notes:
+            print(f"  {note}")
+        print(f"  budget: {ledger.remaining()} of {ledger.limit} call(s) left today")
+        return 0
+
+    try:
+        client = OpenRouterClient.from_env(args.model)
+    except MissingKey as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    try:
+        result = enrich(doc, client=client, ledger=ledger, cache=cache,
+                        overwrite=args.overwrite, limit=args.batches)
+    except BudgetExceeded as exc:
+        print(f"{_paint('budget', YELLOW)} {exc}", file=sys.stderr)
+        return 1
+    except ClientError as exc:
+        print(f"{_paint('error', RED)} {exc}", file=sys.stderr)
+        return 1
+
+    report = validate(doc.to_dict())
+    if report.errors:
+        print(f"{_paint('error', RED)} enrichment produced an invalid document; "
+              f"not writing.", file=sys.stderr)
+        for f in report.errors[:5]:
+            print(f"  {f}", file=sys.stderr)
+        return 1
+
+    out = args.output or args.file
+    doc.save(out)
+    print(f"wrote {out}")
+    print(f"  enriched {len(result.enriched)} node(s) in {result.batches} batch(es)")
+    print(f"  {result.calls_made} API call(s), {result.cache_hits} from cache; "
+          f"{ledger.remaining()} of {ledger.limit} left today")
+    if result.skipped:
+        print(f"  {_paint('skipped', DIM)} {len(result.skipped)} node(s) the model "
+              f"could not describe from the graph alone")
+    for note in result.notes:
+        print(f"  {note}")
+    print(f"  {_paint('note', DIM)} every added description is ai_inference — "
+          f"review with: aiflow inspect {out} --inferred")
+    return 0
+
+
 def cmd_render(args) -> int:
     doc = Document.load(args.file)
     report = validate(doc.to_dict())
@@ -396,6 +459,23 @@ def build_parser() -> argparse.ArgumentParser:
     w.add_argument("--theme", choices=["light", "dark"], default="light")
     w.add_argument("--no-open", action="store_true", help="Write the page but do not open it.")
     w.set_defaults(func=cmd_view)
+
+    en = sub.add_parser("enrich", help="Add inferred semantics to a document using a model.")
+    en.add_argument("file", nargs="?", type=Path)
+    en.add_argument("-o", "--output", type=Path, help="Write here instead of in place.")
+    en.add_argument("--dry-run", action="store_true",
+                    help="Report what it would cost without calling the API.")
+    en.add_argument("--overwrite", action="store_true",
+                    help="Replace existing ai_context instead of only filling gaps.")
+    en.add_argument("--batches", type=int, metavar="N",
+                    help="Process at most N batches this run.")
+    en.add_argument("--model", help=f"OpenRouter model id (or set {'AIFLOW_MODEL'}).")
+    en.add_argument("--limit-per-day", type=int, metavar="N",
+                    help="Override the daily call cap for this run.")
+    en.add_argument("--no-cache", action="store_true", help="Ignore cached responses.")
+    en.add_argument("--status", action="store_true",
+                    help="Show today's API usage and exit.")
+    en.set_defaults(func=cmd_enrich)
 
     gen = sub.add_parser("generate", help="Extract a .aiflow from a Python project.")
     gen.add_argument("path", nargs="?", default=".", type=Path)
