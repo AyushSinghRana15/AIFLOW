@@ -5,5 +5,7 @@ dist/
 build/
 *.egg-info/
 .preview/
+# Secrets. The example file is documentation and must stay tracked.
 .env
 .env.*
+!.env.example
