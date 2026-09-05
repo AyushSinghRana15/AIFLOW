@@ -106,12 +106,15 @@ it does not apply to.
 
 ## Status
 
-| Framework | Adapter |
-|---|---|
-| LangGraph | ✅ [`langgraph.py`](../aiflow/adapters/langgraph.py) |
-| LangChain (LCEL) | planned |
-| OpenAI Agents SDK | planned |
-| CrewAI | planned |
-| LlamaIndex | planned |
+| Framework | Adapter | Reads | Reports as unreadable |
+|---|---|---|---|
+| LangGraph | [`langgraph.py`](../aiflow/adapters/langgraph.py) | `add_node`, `add_edge`, `add_conditional_edges`, `START`/`END` | non-literal names, endpoints, route maps |
+| LangChain | [`langchain.py`](../aiflow/adapters/langchain.py) | LCEL pipes, `RunnableBranch` | chains with no declared ordering, `RunnableLambda` bodies |
+| OpenAI Agents SDK | [`openai_agents.py`](../aiflow/adapters/openai_agents.py) | `Agent(tools=, handoffs=)`, `Runner.run` | handoff lists built at runtime |
+| CrewAI | [`crewai.py`](../aiflow/adapters/crewai.py) | `Task(agent=, context=)`, `Crew(process=)` | `Process.hierarchical`, non-literal task lists |
+| LlamaIndex | [`llamaindex.py`](../aiflow/adapters/llamaindex.py) | `QueryPipeline.add_modules`, `add_link` | non-literal module maps, legacy query-engine chaining |
+
+The fourth column is not an afterthought. It is the part of an adapter that keeps the
+format trustworthy.
 
 Contributions welcome — see [CONTRIBUTING.md](../CONTRIBUTING.md).

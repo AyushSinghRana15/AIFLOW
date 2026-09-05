@@ -204,6 +204,7 @@ def assemble(reports: list[FileReport], root: Path, *, name: str | None = None,
         retriever_finding[f.name] = f
 
     llm_node: dict[str, str] = {}             # finding key -> node id
+    llm_by_var: dict[str, str] = {}           # variable name -> node id
     for f in by_kind.get("llm", []):
         const, literal = f.data.get("model_const"), f.data.get("model")
         ref = model_by_const.get(const) or model_by_literal.get(literal or "")
@@ -213,12 +214,14 @@ def assemble(reports: list[FileReport], root: Path, *, name: str | None = None,
                                    source=[_src(f)],
                                    provenance=_prov(f, "Model identifier is not a literal "
                                                        "or a resolvable constant.")))
-        owner = f.scope.split(".")[0] if f.scope else f.file
+        owner = f.scope.split(".")[0] if f.scope else (f.data.get("var") or f.file)
         nid = ids.mint("llm_", owner)
         nodes.append(Node(id=nid, type="llm", ref=ref, name=f.name,
                           config=f.data.get("parameters") or None,
                           source=[_src(f)], provenance=_prov(f)))
         llm_node[f.key] = nid
+        if f.data.get("var"):
+            llm_by_var[f.data["var"]] = nid
 
     # -- edges: agent -> its own llm calls, prompts, tools, retrievers ------
     for cls, f in agent_finding.items():
@@ -275,7 +278,10 @@ def assemble(reports: list[FileReport], root: Path, *, name: str | None = None,
             owned = by_function.get(target, [])
             has_llm = any(x.kind == "llm" for x in owned)
             has_retrieval = any(x.kind == "retrieval" for x in owned)
-            node_type = "retriever" if has_retrieval and not has_llm else "agent"
+            # An adapter that knows the framework may name the type outright;
+            # otherwise it is inferred from what the handler contains.
+            node_type = f.data.get("node_type") or (
+                "retriever" if has_retrieval and not has_llm else "agent")
 
             nid = ids.mint("", label)
             nodes.append(Node(id=nid, type=node_type, name=label,
@@ -297,19 +303,56 @@ def assemble(reports: list[FileReport], root: Path, *, name: str | None = None,
                     edge("retrieves", nid, store_node[x.data["store"]], x,
                          "retrieval call inside the step handler")
 
+            # Bindings the adapter read directly off the declaration, rather
+            # than from inside a handler function.
+            for tool_name in f.data.get("tools") or ():
+                if tool_name in tool_node:
+                    edge("calls", nid, tool_node[tool_name], f,
+                         "tool bound to this component")
+            for pname in f.data.get("prompts") or ():
+                if pname in prompt_node:
+                    edge("uses", nid, prompt_node[pname], f,
+                         "prompt bound to this component")
+            for store_key in f.data.get("stores") or ():
+                if store_key in store_node:
+                    edge("retrieves", nid, store_node[store_key], f,
+                         "store bound to this component")
+
+            bound = f.data.get("llm")
+            if bound and bound in llm_by_var:
+                edge("calls", nid, llm_by_var[bound], f, "model bound to this component")
+            elif f.data.get("model"):
+                # a model named inline on the declaration, with no variable
+                model_id = model_by_literal.get(f.data["model"])
+                if model_id is None:
+                    model_id = ids.mint("m_", f.data["model"].replace(".", "_"))
+                    models.append(ModelDef(
+                        id=model_id, provider=f.data.get("provider") or "unknown",
+                        model=f.data["model"], source=[_src(f)],
+                        provenance=_fw_prov(f, adapter, "named inline on the declaration")))
+                    model_by_literal[f.data["model"]] = model_id
+                llm_id = ids.mint("llm_", label)
+                nodes.append(Node(id=llm_id, type="llm", ref=model_id,
+                                  name=f"{label} model", source=[_src(f)],
+                                  provenance=_fw_prov(f, adapter)))
+                edge("calls", nid, llm_id, f, "model named on this component")
+
         # branches: the thing generic analysis cannot see
         for f in fw["fw_branch"]:
             source_label = f.data["source"]
-            if source_label not in step:
-                continue
             cid = ids.mint("cond_", f.data.get("router") or f"{source_label}_branch")
             nodes.append(Node(id=cid, type="condition", name=f.data.get("router") or "branch",
                               config={"router": f.data.get("router")} if f.data.get("router") else None,
                               source=[_src(f)],
                               provenance=_fw_prov(f, adapter, "declared via conditional edges")))
-            edges.append(Edge(id=ids.mint("e_", f"{source_label}_to_{cid}"), type="passes",
-                              source=step[source_label], target=cid,
-                              provenance=_fw_prov(f, adapter)))
+            if source_label in step:
+                edges.append(Edge(id=ids.mint("e_", f"{source_label}_to_{cid}"),
+                                  type="passes", source=step[source_label], target=cid,
+                                  provenance=_fw_prov(f, adapter)))
+            else:
+                # A branch that is itself the root of the graph, rather than one
+                # reached from an earlier step.
+                step[source_label] = cid
             for when, target_label in f.data.get("mapping", {}).items():
                 if target_label in step:
                     edges.append(Edge(
@@ -334,6 +377,25 @@ def assemble(reports: list[FileReport], root: Path, *, name: str | None = None,
             nodes.append(Node(id=in_id, type="input", name="Graph entry",
                               source=[_src(f)], provenance=_fw_prov(f, adapter)))
             edge("passes", in_id, step[label], f, "graph entry point")
+
+        # An adapter may know the topology without knowing where it starts: LCEL
+        # declares composition but not an entry point. Fall back to the generic
+        # entrypoint rather than discarding it and leaving the graph headless.
+        if not fw["fw_entry"] and step:
+            reached = {e.target for e in edges}
+            roots = [nid for nid in step.values() if nid not in reached]
+            entry_findings = by_kind.get("entrypoint", [])
+            if roots and entry_findings:
+                ef = entry_findings[0]
+                in_id = ids.mint("in_", ef.name)
+                nodes.append(Node(
+                    id=in_id, type="input", name=ef.name,
+                    description=f"{ef.data.get('kind', 'entry')} entrypoint"
+                                + (f" {ef.data['route']}" if ef.data.get("route") else ""),
+                    source=[_src(ef)], provenance=_prov(ef)))
+                for root_id in roots:
+                    edge("passes", in_id, root_id, ef,
+                         "entrypoint reaching a component with no predecessor")
 
         for f in fw["fw_terminal"]:
             label = f.data["label"]

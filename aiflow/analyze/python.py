@@ -114,6 +114,7 @@ class _Walker(ast.NodeVisitor):
         # project so a retrieval call can be linked to a store defined in another
         # module; a same-file definition overwrites the seed.
         self.store_vars: dict[str, str] = dict(known_stores or {})
+        self.assign_targets: list[str] = []
 
     # -- context ---------------------------------------------------------
     @property
@@ -157,11 +158,14 @@ class _Walker(ast.NodeVisitor):
     # -- assignments -------------------------------------------------------
     def visit_Assign(self, node: ast.Assign):
         targets = [t.id for t in node.targets if isinstance(t, ast.Name)]
+        # so a call nested in this statement can report what it was bound to
+        self.assign_targets = targets
         for name in targets:
             self._maybe_prompt(name, node)
             self._maybe_model(name, node)
             self._maybe_tool_schema(name, node)
         self._maybe_store(targets, node.value, node)
+        self._maybe_llm_client(targets, node.value, node)
         self._maybe_instance(targets, node.value, node)
         self.generic_visit(node)
 
@@ -213,6 +217,44 @@ class _Walker(ast.NodeVisitor):
                      symbol=self.qualname(name), confidence=0.93,
                      data={"description": description, "declared_in": name,
                            "schema": _literal(schema_node)})
+
+    def _maybe_llm_client(self, targets: list[str], value: ast.AST, node: ast.Assign):
+        """`llm = ChatOpenAI(model="gpt-4o")` -- a configured model, not a call site.
+
+        Frameworks construct the model once and invoke it through their own
+        runtime, so there is no `messages.create` for the call-site rules to
+        match. Requiring `model=` is what separates a configured model from a
+        bare SDK client.
+        """
+        if not isinstance(value, ast.Call):
+            return
+        chain = _chain(value.func)
+        ctor = chain.rsplit(".", 1)[-1]
+        model_arg = _kwarg(value, "model") or _kwarg(value, "model_name")
+        if model_arg is None:
+            return
+        model = _const_str(model_arg)
+        model_const = model_arg.id if isinstance(model_arg, ast.Name) else None
+        if model is None and model_const is None:
+            return
+
+        for pattern, provider, confidence in sig.LLM_CLIENTS:
+            if ctor != pattern:
+                continue
+            params = {}
+            for kw in ("temperature", "max_tokens", "top_p", "timeout"):
+                arg = _kwarg(value, kw)
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, (int, float)):
+                    params[kw] = arg.value
+            label = targets[0] if targets else ctor
+            self.add(kind="llm", key=f"llm:{self.r.path}:{node.lineno}", name=label,
+                     line=node.lineno, end_line=getattr(node, "end_lineno", node.lineno),
+                     symbol=self.qualname(label), confidence=confidence,
+                     data={"provider": provider, "call": chain, "model": model,
+                           "model_const": model_const, "prompts": [], "tool_refs": [],
+                           "parameters": params, "var": label, "constructed": True})
+            self.r.providers.add(provider)
+            return
 
     def _maybe_instance(self, targets: list[str], value: ast.AST, node: ast.Assign):
         """`supervisor = SupervisorAgent()` -- binds a variable to a class so a
@@ -385,7 +427,8 @@ class _Walker(ast.NodeVisitor):
                 end_line=getattr(node, "end_lineno", node.lineno),
                 symbol=self.qualname(leaf),
                 confidence=confidence if known_store else confidence - 0.1,
-                data={"call": chain, "store": known_store, "receiver": receiver})
+                data={"call": chain, "store": known_store, "receiver": receiver,
+                      "assigned_to": list(self.assign_targets)})
             if self.enclosing_class:
                 self.class_has_retrieval.setdefault(self.enclosing_class, []).append(finding)
             return

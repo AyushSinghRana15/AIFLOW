@@ -14,8 +14,9 @@ import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 
-__all__ = ["OpenRouterClient", "ClientError", "MissingKey",
+__all__ = ["OpenRouterClient", "ClientError", "MissingKey", "load_dotenv",
            "DEFAULT_MODEL", "ENV_KEY", "ENV_MODEL"]
 
 ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
@@ -25,6 +26,39 @@ DEFAULT_MODEL = "minimax/minimax-m3:free"
 REFERER = "https://github.com/AyushSinghRana15/AIFLOW"
 
 _KEY_PATTERN = re.compile(r"sk-or-[A-Za-z0-9\-_]+")
+_DOTENV_MAX_DEPTH = 4
+
+
+def load_dotenv(start: Path | None = None) -> str | None:
+    """Read a `.env` from the working directory or a parent.
+
+    Only fills variables that are not already set, so the environment always
+    wins -- a shell export or a CI secret must not be silently overridden by a
+    stale file. Returns the file used, for reporting.
+
+    Deliberately hand-rolled: adding a dependency to read four lines of
+    KEY=VALUE is not worth it for a package whose job is parsing JSON.
+    """
+    here = (start or Path.cwd()).resolve()
+    for directory in [here, *list(here.parents)[:_DOTENV_MAX_DEPTH]]:
+        candidate = directory / ".env"
+        if not candidate.is_file():
+            continue
+        try:
+            lines = candidate.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for raw in lines:
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip().removeprefix("export ").strip()
+            value = value.strip().strip("'").strip('"')
+            if key and key not in os.environ:
+                os.environ[key] = value
+        return str(candidate)
+    return None
 
 
 class ClientError(RuntimeError):
@@ -47,12 +81,16 @@ class OpenRouterClient:
 
     @classmethod
     def from_env(cls, model: str | None = None) -> "OpenRouterClient":
+        if not os.environ.get(ENV_KEY, "").strip():
+            load_dotenv()
         key = os.environ.get(ENV_KEY, "").strip()
         if not key:
             raise MissingKey(
                 f"{ENV_KEY} is not set.\n"
                 f"  export {ENV_KEY}='sk-or-...'   # from https://openrouter.ai/keys\n"
-                f"Keep it in your shell profile or a .env file that is gitignored — "
+                f"or put it in a .env file beside your project:\n"
+                f"  echo '{ENV_KEY}=sk-or-...' >> .env\n"
+                f"Make sure .env is gitignored — a key belongs in the environment, "
                 f"never in the repository."
             )
         return cls(api_key=key, model=model or os.environ.get(ENV_MODEL) or DEFAULT_MODEL)

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import pathlib
 import sys
 import tempfile
 from pathlib import Path
@@ -134,14 +135,37 @@ def suite_cache(r: Results):
 
 def suite_client(r: Results):
     saved = os.environ.pop("OPENROUTER_API_KEY", None)
-    raised = False
-    try:
-        OpenRouterClient.from_env()
-    except MissingKey as exc:
-        raised, msg = True, str(exc)
-    r.check(raised, "client: a missing key is a clear error, not a crash")
-    r.check("OPENROUTER_API_KEY" in msg and "never in the repository" in msg,
-            "client: the error says where the key goes and where it must not")
+    cwd = os.getcwd()
+    with tempfile.TemporaryDirectory() as empty:
+        # somewhere with no .env above it, or dotenv loading would find the
+        # repository's own file and there would be nothing to report
+        os.chdir(empty)
+        raised, msg = False, ""
+        try:
+            OpenRouterClient.from_env()
+        except MissingKey as exc:
+            raised, msg = True, str(exc)
+        r.check(raised, "client: a missing key is a clear error, not a crash")
+        r.check("OPENROUTER_API_KEY" in msg and "never in the repository" in msg,
+                "client: the error says where the key goes and where it must not")
+        r.check(".env" in msg, "client: the error mentions the .env option")
+
+        # a .env is picked up
+        pathlib.Path(empty, ".env").write_text(
+            "# a comment\nOPENROUTER_API_KEY=sk-or-fromfile\nAIFLOW_MODEL=x/y:free\n")
+        client = OpenRouterClient.from_env()
+        r.eq(client.api_key, "sk-or-fromfile", "client: a key in .env is used")
+        r.eq(client.model, "x/y:free", "client: .env can set the model too")
+
+        # the environment wins, so a stale file cannot override a CI secret
+        for key in ("OPENROUTER_API_KEY", "AIFLOW_MODEL"):
+            os.environ.pop(key, None)
+        os.environ["OPENROUTER_API_KEY"] = "sk-or-fromenv"
+        r.eq(OpenRouterClient.from_env().api_key, "sk-or-fromenv",
+             "client: an already-set variable is not overridden by .env")
+        for key in ("OPENROUTER_API_KEY", "AIFLOW_MODEL"):
+            os.environ.pop(key, None)
+    os.chdir(cwd)
     if saved:
         os.environ["OPENROUTER_API_KEY"] = saved
 

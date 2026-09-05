@@ -23,8 +23,13 @@ separately from the **package** — see [the spec's version table](spec/SPEC.md#
   export in light and dark themes.
 - **Python analyzer** — extracts agents, LLM calls, prompts, tools, retrievers, vector
   stores, and data flow, with a source reference and confidence on every claim.
-- **Framework adapters** — a registry plus a LangGraph adapter, the first component
-  able to extract `condition` nodes and `routes_to` edges.
+- **Framework adapters** — a registry plus adapters for LangGraph, LangChain (LCEL),
+  the OpenAI Agents SDK, CrewAI, and LlamaIndex. Adapters are the only component able
+  to extract `condition` nodes and `routes_to` edges.
+- **LLM client detection** — `ChatOpenAI(model=…)`, `ChatAnthropic(model=…)` and
+  similar constructors, which frameworks use instead of a direct call site.
+- **`.env` support** — the key is read from a gitignored `.env` beside the project when
+  it is not already in the environment.
 - **Semantic analyzer** — model-inferred `ai_context` under a batching, caching, and
   per-day call budget.
 - **Question answering** — `aiflow ask`, computing exact answers from the graph where

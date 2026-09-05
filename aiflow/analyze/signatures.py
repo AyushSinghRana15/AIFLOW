@@ -27,6 +27,27 @@ LLM_CALLS = [
     ("invoke_model",               "bedrock",   0.85),
 ]
 
+# -- LLM client constructors -------------------------------------------------
+# Matched only when a `model=` argument is present. `OpenAI()` is the raw SDK
+# client; `OpenAI(model="gpt-4o")` is a configured model, and the difference is
+# the argument. Framework wrappers are unambiguous and score higher.
+LLM_CLIENTS = [
+    ("ChatAnthropic",          "anthropic", 0.93),
+    ("ChatOpenAI",             "openai",    0.93),
+    ("AzureChatOpenAI",        "azure",     0.91),
+    ("ChatGoogleGenerativeAI", "google",    0.91),
+    ("ChatVertexAI",           "google",    0.90),
+    ("ChatBedrock",            "bedrock",   0.90),
+    ("ChatMistralAI",          "mistral",   0.90),
+    ("ChatOllama",             "ollama",    0.90),
+    ("ChatCohere",             "cohere",    0.90),
+    ("ChatGroq",               "groq",      0.90),
+    ("Anthropic",              "anthropic", 0.78),
+    ("OpenAI",                 "openai",    0.78),
+    ("Gemini",                 "google",    0.80),
+    ("Ollama",                 "ollama",    0.80),
+]
+
 # -- Vector stores -----------------------------------------------------------
 VECTOR_STORES = [
     ("chromadb.PersistentClient",       "chroma",     0.92),
@@ -42,6 +63,8 @@ VECTOR_STORES = [
     ("FAISS.from_documents",            "faiss",      0.90),
     ("FAISS.load_local",                "faiss",      0.90),
     ("PGVector",                        "pgvector",   0.88),
+    ("VectorStoreIndex.from_documents",  "llamaindex", 0.88),
+    ("VectorStoreIndex.from_vector_store", "llamaindex", 0.88),
 ]
 
 # -- Retrieval operations ----------------------------------------------------
@@ -82,7 +105,7 @@ FRAMEWORKS = {
     "langgraph": "langgraph", "langchain": "langchain",
     "langchain_core": "langchain", "langchain_community": "langchain",
     "crewai": "crewai", "llama_index": "llamaindex",
-    "agents": "openai-agents", "autogen": "autogen",
+    "agents": "openai-agents", "openai_agents": "openai-agents", "autogen": "autogen",
     "semantic_kernel": "semantic-kernel", "haystack": "haystack",
     "dspy": "dspy", "pydantic_ai": "pydantic-ai",
 }

@@ -153,10 +153,18 @@ Note the `condition=1`. **Adapters are the only component allowed to emit `condi
 nodes and `routes_to` edges**, because they are the only one that does not have to
 guess — and they claim `framework_adapter` provenance to say so.
 
-| Framework | Status |
+| Framework | What the adapter reads |
 |---|---|
-| LangGraph | ✅ |
-| LangChain · OpenAI Agents SDK · CrewAI · LlamaIndex | planned |
+| **LangGraph** | `add_node` · `add_edge` · `add_conditional_edges` · `START`/`END` |
+| **LangChain** | LCEL pipe composition · `RunnableBranch` |
+| **OpenAI Agents SDK** | `Agent(tools=…, handoffs=…)` · `Runner.run` |
+| **CrewAI** | `Task(agent=…, context=…)` · `Crew(process=…)` |
+| **LlamaIndex** | `QueryPipeline.add_modules` · `add_link` |
+
+Each reports what it *cannot* see rather than guessing: CrewAI's
+`Process.hierarchical` delegates ordering to a runtime manager, LCEL chains with no
+`RunnableBranch` have no declared order, and any wiring built from a variable is
+unreadable to an AST walk. In every case the adapter says so.
 
 Adding one is a self-contained job: see [`docs/ADAPTERS.md`](docs/ADAPTERS.md).
 
@@ -310,7 +318,12 @@ point: enriching a parsed node must never downgrade it to a guess. It also means
 Review what it produced with `aiflow inspect --inferred`. Findings that rest on
 inferred context are tagged `[inferred]` wherever they surface.
 
-> **Configuration.** `OPENROUTER_API_KEY` (required), `AIFLOW_MODEL` (default a free
+> **Configuration.** Put these in your environment or a gitignored `.env` beside the
+> project — `aiflow` reads `.env` from the working directory or a parent, and an
+> already-set variable always wins so a stale file cannot override a CI secret. See
+> [`.env.example`](.env.example).
+>
+> `OPENROUTER_API_KEY` (required), `AIFLOW_MODEL` (default a free
 > model — free ids change, so check [openrouter.ai/models?q=free](https://openrouter.ai/models?q=free)),
 > `AIFLOW_DAILY_LIMIT` (default 50), `AIFLOW_HOME` (default `~/.aiflow`, holds the
 > ledger and cache). The key is read from the environment only — never written to
@@ -604,7 +617,7 @@ pip install -e .
 python tests/run_all.py
 ```
 
-**953 assertions across seven suites.**
+**1,020 assertions across seven suites.**
 
 | Suite | Covers |
 |---|---|
@@ -612,7 +625,7 @@ python tests/run_all.py
 | [`test_sdk.py`](tests/test_sdk.py) | Lossless round-tripping, graph queries, diff semantics, CLI exit codes |
 | [`test_render.py`](tests/test_render.py) | Layering (including cyclic workflows), determinism, SVG output, and that the page stays self-contained and escapes untrusted content |
 | [`test_analyze.py`](tests/test_analyze.py) | Every detection rule, cross-file linking, and that nothing generated carries invented `ai_context` |
-| [`test_adapters.py`](tests/test_adapters.py) | Every LangGraph construct, that non-literal wiring is reported rather than invented, and that a non-framework project is byte-identical with the adapter layer on or off |
+| [`test_adapters.py`](tests/test_adapters.py) | Every construct of all five adapters, that non-literal wiring is reported rather than invented, that each fixture validates with zero warnings, and that a non-framework project is byte-identical with the adapter layer on or off |
 | [`test_semantic.py`](tests/test_semantic.py) | Budget, cache, and enrichment — entirely offline against a fake client, so the suite never spends a rate-limited quota |
 | [`test_docs.py`](tests/test_docs.py) | README links, anchors, generated diagrams, Mermaid syntax, plugin manifests, and that every diagnostic code the validator emits is documented for implementers |
 
@@ -657,7 +670,7 @@ example).
 | 4 | Interactive renderer | ✅ |
 | 5 | Python code analyzer | ✅ |
 | 6 | AI semantic analyzer | ✅ |
-| 7 | Framework adapters — LangGraph ✅, others planned | ✅ |
+| 7 | Framework adapters — LangGraph, LangChain, OpenAI Agents SDK, CrewAI, LlamaIndex | ✅ |
 | 8 | AI-powered workflow exploration | ✅ |
 | 9 | Git / developer integration | next |
 | 10 | Ecosystem & open specification | ✅ |
@@ -667,9 +680,9 @@ All ten phases are implemented. Phase 6 was the first component permitted to emi
 one spec change so far: `ai_context` needed provenance of its own, added in
 [1.1](spec/SPEC.md#9-versioning).
 
-Next up is breadth rather than new layers: adapters for LangChain, the OpenAI Agents
-SDK, CrewAI, and LlamaIndex, all of which are self-contained contributions against a
-[documented contract](docs/ADAPTERS.md).
+All five planned adapters are implemented. Further breadth — more frameworks, more
+languages — is self-contained work against a [documented contract](docs/ADAPTERS.md)
+and a [conformance definition](docs/CONFORMANCE.md).
 
 ## License
 
