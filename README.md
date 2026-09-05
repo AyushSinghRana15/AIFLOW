@@ -7,18 +7,19 @@
 <p align="center">
   <a href="https://github.com/AyushSinghRana15/AIFLOW/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/AyushSinghRana15/AIFLOW/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-3776ab.svg">
-  <a href="spec/SPEC.md"><img alt="Spec v1.0" src="https://img.shields.io/badge/spec-v1.0-6f42c1.svg"></a>
+  <a href="spec/SPEC.md"><img alt="Spec v1.1" src="https://img.shields.io/badge/spec-v1.1-6f42c1.svg"></a>
+  <a href="#supported-frameworks"><img alt="5 frameworks" src="https://img.shields.io/badge/adapters-5%20frameworks-0ca678.svg"></a>
   <a href="LICENSE"><img alt="Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-16a34a.svg"></a>
 </p>
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/generated-dark.svg">
-    <img alt="A workflow extracted from a Python project: an entrypoint feeding a supervisor agent, which routes to an answerer agent backed by a retriever, a vector store, prompts and a tool" src="docs/generated-light.svg" width="100%">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/langgraph-dark.svg">
+    <img alt="A workflow extracted from a LangGraph project: a graph entry feeding a classify agent, a condition node branching three ways to a retriever, a lookup step and an answer agent, ending at a graph result" src="docs/langgraph-light.svg" width="100%">
   </picture>
 </p>
 
-<p align="center"><sub>Not hand-drawn. This is <code>aiflow generate</code> run against the Python project in <a href="examples/sample-project"><code>examples/sample-project</code></a>.</sub></p>
+<p align="center"><sub>Not hand-drawn. This is <code>aiflow generate</code> run against <a href="examples/langgraph-project"><code>examples/langgraph-project</code></a> — including the orange <code>condition</code> node and its three labelled routes, read from a real <code>add_conditional_edges</code> call.</sub></p>
 
 ---
 
@@ -27,10 +28,16 @@ workflow that *can* be rendered as a diagram.
 
 ## Contents
 
-- [The problem](#the-problem) · [Quick start](#quick-start) · [Guide](#guide)
-- [The format](#the-format) · [What makes it different](#what-makes-it-different)
-- [Library API](#library-api) · [Architecture](#architecture)
-- [Claude Code plugin](#claude-code-plugin) · [Development](#development) · [Roadmap](#roadmap)
+**Using it** — [The problem](#the-problem) · [Quick start](#quick-start) ·
+[Supported frameworks](#supported-frameworks) · [Guide](#guide) ·
+[Claude Code plugin](#claude-code-plugin)
+
+**Understanding it** — [The format](#the-format) ·
+[What makes it different](#what-makes-it-different) · [Architecture](#architecture) ·
+[Library API](#library-api)
+
+**Working on it** — [Development](#development) · [Contributing](#contributing) ·
+[Roadmap](#roadmap)
 
 ## The problem
 
@@ -48,7 +55,9 @@ machine-readable graph that holds all six, and knows where each claim came from.
 ## Quick start
 
 ```bash
-pip install aiflow-format
+git clone https://github.com/AyushSinghRana15/AIFLOW.git
+cd AIFLOW
+pip install -e .
 ```
 
 Point it at a Python project and look at what comes back:
@@ -65,16 +74,44 @@ aiflow generate ./my-ai-project -o project.aiflow
 aiflow validate project.aiflow --strict
 ```
 
-<details>
-<summary>Install from source</summary>
+> **Not on PyPI yet.** `pip install aiflow-format` will not work today — the package
+> has not been published. The release automation is written and tested; what remains
+> is a one-time PyPI account setup that only the maintainer can do. The steps are in
+> [`docs/RELEASING.md`](docs/RELEASING.md).
 
-```bash
-git clone https://github.com/AyushSinghRana15/AIFLOW.git
-cd AIFLOW
-pip install -e .
-aiflow --version
+## Supported frameworks
+
+Generic analysis sees components. It cannot see **topology**, because
+`add_conditional_edges` means "branch here" only if you already know LangGraph. When a
+framework is detected, its adapter runs and contributes what only it can:
+
+| Framework | What the adapter reads |
+|---|---|
+| **LangGraph** | `add_node` · `add_edge` · `add_conditional_edges` · `START`/`END` |
+| **LangChain** | LCEL pipe composition · `RunnableBranch` |
+| **OpenAI Agents SDK** | `Agent(tools=…, handoffs=…)` · `Runner.run` |
+| **CrewAI** | `Task(agent=…, context=…)` · `Crew(process=…)` |
+| **LlamaIndex** | `QueryPipeline.add_modules` · `add_link` |
+
 ```
-</details>
+$ aiflow generate examples/langgraph-project
+wrote project.aiflow
+  analyzed 7 file(s) -> 12 nodes, 13 edges
+  agent=3, condition=1, input=1, llm=2, output=1, prompt=2, retriever=1, vector_store=1
+  adapter  langgraph -> aiflow-adapter-langgraph
+```
+
+Note the `condition=1`. **Adapters are the only component allowed to emit `condition`
+nodes and `routes_to` edges**, because they are the only one that does not have to
+guess — and they claim `framework_adapter` provenance to say so.
+
+Each adapter also reports what it *cannot* see. CrewAI's `Process.hierarchical`
+delegates ordering to a runtime manager; LCEL chains with no `RunnableBranch` have no
+declared order; any wiring built from a variable is unreadable to an AST walk. In every
+case the adapter emits nothing and says why, rather than inventing a plausible graph.
+
+Adding one is self-contained work against a documented contract:
+[`docs/ADAPTERS.md`](docs/ADAPTERS.md).
 
 ## Guide
 
@@ -83,8 +120,8 @@ aiflow --version
 | [`aiflow view`](#aiflow-view) | Analyze a project (or open a document) and show it in a browser |
 | [`aiflow generate`](#aiflow-generate) | Extract a `.aiflow` from a Python project |
 | [`aiflow validate`](#aiflow-validate) | Check a document, structurally and semantically |
-| [`aiflow inspect`](#aiflow-inspect) | Ask behavioral questions about a workflow |
-| [`aiflow ask`](#aiflow-ask) | Ask a question about a workflow |
+| [`aiflow inspect`](#aiflow-inspect) | Structured views — paths, retrieval surface, tools, risks |
+| [`aiflow ask`](#aiflow-ask) | A question in plain language, answered from the graph where possible |
 | [`aiflow enrich`](#aiflow-enrich) | Add inferred semantics with a model, under a call budget |
 | [`aiflow render`](#aiflow-render) | Write an interactive page or a static SVG |
 | [`aiflow diff`](#aiflow-diff) | Compare two documents semantically |
@@ -111,7 +148,8 @@ $ aiflow generate examples/sample-project
 wrote project.aiflow
   analyzed 8 file(s) -> 11 nodes, 10 edges
   agent=2, input=1, llm=2, output=1, prompt=2, retriever=1, tool=1, vector_store=1
-  note branching is not extracted by static analysis; add condition nodes by hand
+  note no branching found. Generic analysis does not extract it; a framework
+       adapter does, where one applies.
 ```
 
 It walks the syntax tree and extracts agents, LLM calls, prompts, tools, retrievers,
@@ -136,37 +174,8 @@ decorators and tool schema literals. Rules live in
 [`aiflow/analyze/signatures.py`](aiflow/analyze/signatures.py) as a table — adding a
 provider is a data edit.
 
-#### Framework adapters
-
-Generic analysis cannot see *topology* — `add_conditional_edges` means "branch here"
-only if you know LangGraph. When a framework is detected, its adapter runs and
-contributes what only it can:
-
-```
-$ aiflow generate examples/langgraph-project
-  analyzed 7 file(s) -> 12 nodes, 13 edges
-  agent=3, condition=1, input=1, llm=2, output=1, prompt=2, retriever=1, vector_store=1
-  adapter  langgraph -> aiflow-adapter-langgraph
-```
-
-Note the `condition=1`. **Adapters are the only component allowed to emit `condition`
-nodes and `routes_to` edges**, because they are the only one that does not have to
-guess — and they claim `framework_adapter` provenance to say so.
-
-| Framework | What the adapter reads |
-|---|---|
-| **LangGraph** | `add_node` · `add_edge` · `add_conditional_edges` · `START`/`END` |
-| **LangChain** | LCEL pipe composition · `RunnableBranch` |
-| **OpenAI Agents SDK** | `Agent(tools=…, handoffs=…)` · `Runner.run` |
-| **CrewAI** | `Task(agent=…, context=…)` · `Crew(process=…)` |
-| **LlamaIndex** | `QueryPipeline.add_modules` · `add_link` |
-
-Each reports what it *cannot* see rather than guessing: CrewAI's
-`Process.hierarchical` delegates ordering to a runtime manager, LCEL chains with no
-`RunnableBranch` have no declared order, and any wiring built from a variable is
-unreadable to an AST walk. In every case the adapter says so.
-
-Adding one is a self-contained job: see [`docs/ADAPTERS.md`](docs/ADAPTERS.md).
+Framework topology is handled separately — see
+[Supported frameworks](#supported-frameworks).
 
 ### `aiflow validate`
 
@@ -233,14 +242,15 @@ agents call tools, what breaks if this store fails — is a graph query with a p
 answer. Those are computed directly:
 
 ```
-$ aiflow ask project.aiflow "what happens if vs_kb fails?"
-
+$ aiflow ask examples/rag-support-agent.aiflow "what happens if vs_kb fails?"
 If vs_kb (vector_store) fails, 5 component(s) are affected:
-  retrieve (retriever)
-  answer (agent)
+  retr_kb (retriever)
+  agent_answerer (agent)
+  prompt_answer (prompt)
   llm_answer (llm)
-  ...
-The failure reaches out_answer_result, so there is no alternate path to a result.
+  out_response (output)
+
+The failure reaches out_response, so there is no alternate path to a result.
 
   computed from the graph — exact, no model involved
 ```
@@ -549,15 +559,25 @@ doc.save("hand-written.aiflow")
 ## Architecture
 
 ```mermaid
-flowchart LR
-    src["AI project<br/><i>source · config</i>"] --> ast["AST parser"]
-    ast --> det["Framework<br/>detector"]
-    det --> asm["Semantic<br/>assembler"]
-    asm --> doc[("<b>project.aiflow</b>")]
-    doc --> view["Interactive<br/>viewer"]
-    doc --> reason["AI reasoning<br/><i>graph queries</i>"]
-    doc --> tools["Developer tools<br/><i>diff · CI gates</i>"]
+flowchart TB
+    src["AI project<br/><i>source · config</i>"]
+    subgraph layers["Three analysis layers, separated by what each may claim"]
+        direction LR
+        generic["<b>Generic analysis</b><br/>components, data flow<br/><i>static_analysis</i>"]
+        adapter["<b>Framework adapter</b><br/>topology, branching<br/><i>framework_adapter</i>"]
+        semantic["<b>Semantic analyzer</b><br/>intent, failure modes<br/><i>ai_inference</i>"]
+        generic --> adapter --> semantic
+    end
+    src --> layers
+    layers --> doc[("<b>project.aiflow</b>")]
+    doc --> viewer["Interactive viewer<br/><i>render · svg</i>"]
+    doc --> queries["Graph queries<br/><i>inspect · ask</i>"]
+    doc --> devtools["Developer tools<br/><i>diff · CI gates</i>"]
 ```
+
+The layers are separated by **what each is permitted to claim**, not by convenience.
+That boundary is why a `condition` node never carries `static_analysis` provenance,
+and why the analyzer emits no `ai_context` at all.
 
 | Module | Responsibility |
 |---|---|
@@ -657,8 +677,8 @@ The project has one unusual rule, and most of its design follows from it:
 
 The most self-contained places to start are a **detection signature** (a table edit in
 [`signatures.py`](aiflow/analyze/signatures.py) plus a positive and a negative test)
-and a **framework adapter** ([the guide](docs/ADAPTERS.md); LangGraph is a worked
-example).
+and a **framework adapter** ([the guide](docs/ADAPTERS.md), with five worked examples
+in [`aiflow/adapters/`](aiflow/adapters)).
 
 ## Roadmap
 
@@ -672,17 +692,22 @@ example).
 | 6 | AI semantic analyzer | ✅ |
 | 7 | Framework adapters — LangGraph, LangChain, OpenAI Agents SDK, CrewAI, LlamaIndex | ✅ |
 | 8 | AI-powered workflow exploration | ✅ |
-| 9 | Git / developer integration | next |
+| 9 | Git / developer integration | ✅ |
 | 10 | Ecosystem & open specification | ✅ |
 
-All ten phases are implemented. Phase 6 was the first component permitted to emit
-`ai_inference` — what the provenance model was built for — and building it surfaced the
-one spec change so far: `ai_context` needed provenance of its own, added in
-[1.1](spec/SPEC.md#9-versioning).
+All ten phases and all five planned adapters are implemented. Phase 6 was the first
+component permitted to emit `ai_inference` — what the provenance model was built for —
+and building it surfaced the one spec change so far: `ai_context` needed provenance of
+its own, added in [1.1](spec/SPEC.md#9-versioning).
 
-All five planned adapters are implemented. Further breadth — more frameworks, more
-languages — is self-contained work against a [documented contract](docs/ADAPTERS.md)
-and a [conformance definition](docs/CONFORMANCE.md).
+### Not yet done
+
+| | |
+|---|---|
+| **Publish to PyPI** | The release workflow is written and tested; a one-time PyPI account setup remains, which only the maintainer can do. Steps: [`docs/RELEASING.md`](docs/RELEASING.md). Until then, install from source. |
+| **More framework adapters** | Autogen, DSPy, Pydantic AI, Semantic Kernel, Haystack. Self-contained work against [`docs/ADAPTERS.md`](docs/ADAPTERS.md). |
+| **Languages beyond Python** | The format is language-independent; the analyzer is not. A TypeScript analyzer would be the obvious next one — [`docs/CONFORMANCE.md`](docs/CONFORMANCE.md) defines what it would have to satisfy. |
+| **Runtime tracing** | `runtime_trace` provenance exists in the spec with nothing emitting it. It is the only way to capture graphs assembled at runtime, which static analysis reports as unreadable. |
 
 ## License
 

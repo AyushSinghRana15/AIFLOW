@@ -7,6 +7,9 @@ separately from the **package** — see [the spec's version table](spec/SPEC.md#
 
 ## [Unreleased]
 
+Not yet published to PyPI. Install from source; see
+[`docs/RELEASING.md`](docs/RELEASING.md) for what remains.
+
 ### Added
 
 - **Specification v1.0** — nodes, semantic edges, registries, provenance, source
@@ -38,6 +41,7 @@ separately from the **package** — see [the spec's version table](spec/SPEC.md#
   comparison against a git ref, plus a GitHub Action and pre-commit hooks.
 - **Claude Code plugin** — `map`, `check`, and `review` skills.
 - **Documentation** — [conformance](docs/CONFORMANCE.md) for other-language
-  implementations, an [adapter guide](docs/ADAPTERS.md), and generated diagrams.
+  implementations, an [adapter guide](docs/ADAPTERS.md), a
+  [release runbook](docs/RELEASING.md), and generated diagrams.
 
 [Unreleased]: https://github.com/AyushSinghRana15/AIFLOW/commits/main

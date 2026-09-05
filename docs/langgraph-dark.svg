@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1568" height="352" viewBox="0 0 1568 352" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" role="img">
+<title>langgraph-project</title>
+<rect width="1568" height="352" fill="#0e1014"/>
+<defs>
+<marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6b7280"/></marker>
+</defs>
+<path d="M480,159 C520,159 528,243 568,243" fill="none" stroke="#6b7280" stroke-width="2.0" opacity="0.65" marker-end="url(#a)"/>
+<path d="M480,159 C520,159 528,75 568,75" fill="none" stroke="#6b7280" stroke-width="1.5" opacity="0.65" marker-end="url(#a)" stroke-dasharray="5 4"/>
+<path d="M1000,117 C1040,117 1048,117 1088,117" fill="none" stroke="#3bc9db" stroke-width="1.5" opacity="0.65" marker-end="url(#a)"/>
+<path d="M1260,201 C1300,201 1308,159 1348,159" fill="none" stroke="#6b7280" stroke-width="2.0" opacity="0.65" marker-end="url(#a)"/>
+<path d="M1260,201 C1300,201 1308,75 1348,75" fill="none" stroke="#6b7280" stroke-width="1.5" opacity="0.65" marker-end="url(#a)" stroke-dasharray="5 4"/>
+<path d="M480,159 C520,159 528,159 568,159" fill="none" stroke="#6b7280" stroke-width="1.5" opacity="0.65" marker-end="url(#a)"/>
+<path d="M740,159 C780,159 788,117 828,117" fill="none" stroke="#6b7280" stroke-width="1.5" opacity="0.65" marker-end="url(#a)" stroke-dasharray="2 4"/>
+<text x="784" y="132" text-anchor="middle" font-size="9" fill="#9aa1ae">knowledge_base</text>
+<path d="M740,159 C780,159 788,201 828,201" fill="none" stroke="#6b7280" stroke-width="1.5" opacity="0.65" marker-end="url(#a)" stroke-dasharray="2 4"/>
+<text x="784" y="174" text-anchor="middle" font-size="9" fill="#9aa1ae">ticket</text>
+<path d="M740,159 C897,159 931,201 1088,201" fill="none" stroke="#6b7280" stroke-width="1.5" opacity="0.65" marker-end="url(#a)" stroke-dasharray="2 4"/>
+<text x="914" y="174" text-anchor="middle" font-size="9" fill="#9aa1ae">direct</text>
+<path d="M1000,117 C1040,117 1048,201 1088,201" fill="none" stroke="#6b7280" stroke-width="1.5" opacity="0.65" marker-end="url(#a)"/>
+<path d="M1000,201 C1040,201 1048,201 1088,201" fill="none" stroke="#6b7280" stroke-width="1.5" opacity="0.65" marker-end="url(#a)"/>
+<path d="M220,159 C260,159 268,159 308,159" fill="none" stroke="#6b7280" stroke-width="1.5" opacity="0.65" marker-end="url(#a)"/>
+<path d="M1260,201 C1300,201 1308,243 1348,243" fill="none" stroke="#6b7280" stroke-width="2.4" opacity="0.65" marker-end="url(#a)"/>
+<g transform="translate(568,48)">
+<rect width="172" height="54" rx="9" fill="#171a21" stroke="#38d9a9" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#e7e9ee">CLASSIFY_PROMPT</text>
+<text x="12" y="38" font-size="10" fill="#9aa1ae">prompt</text>
+</g>
+<g transform="translate(1348,48)">
+<rect width="172" height="54" rx="9" fill="#171a21" stroke="#38d9a9" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#e7e9ee">ANSWER_PROMPT</text>
+<text x="12" y="38" font-size="10" fill="#9aa1ae">prompt</text>
+</g>
+<g transform="translate(1088,90)">
+<rect width="172" height="54" rx="9" fill="#171a21" stroke="#74c0fc" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#e7e9ee">kb</text>
+<text x="12" y="38" font-size="10" fill="#9aa1ae">vector_store</text>
+</g>
+<g transform="translate(568,216)">
+<rect width="172" height="54" rx="9" fill="#171a21" stroke="#b197fc" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#e7e9ee">app.nodes.create</text>
+<text x="12" y="38" font-size="10" fill="#9aa1ae">llm</text>
+</g>
+<g transform="translate(1348,132)">
+<rect width="172" height="54" rx="9" fill="#171a21" stroke="#b197fc" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#e7e9ee">app.nodes.create</text>
+<text x="12" y="38" font-size="10" fill="#9aa1ae">llm</text>
+</g>
+<g transform="translate(308,132)">
+<rect width="172" height="54" rx="9" fill="#171a21" stroke="#748ffc" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#e7e9ee">classify</text>
+<text x="12" y="38" font-size="10" fill="#9aa1ae">agent</text>
+</g>
+<g transform="translate(828,90)">
+<rect width="172" height="54" rx="9" fill="#171a21" stroke="#3bc9db" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#e7e9ee">retrieve</text>
+<text x="12" y="38" font-size="10" fill="#9aa1ae">retriever</text>
+</g>
+<g transform="translate(828,174)">
+<rect width="172" height="54" rx="9" fill="#171a21" stroke="#748ffc" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#e7e9ee">lookup</text>
+<text x="12" y="38" font-size="10" fill="#9aa1ae">agent</text>
+</g>
+<g transform="translate(1088,174)">
+<rect width="172" height="54" rx="9" fill="#171a21" stroke="#748ffc" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#e7e9ee">answer</text>
+<text x="12" y="38" font-size="10" fill="#9aa1ae">agent</text>
+</g>
+<g transform="translate(568,132)">
+<rect width="172" height="54" rx="9" fill="#171a21" stroke="#ffa94d" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#e7e9ee">route_question</text>
+<text x="12" y="38" font-size="10" fill="#9aa1ae">condition</text>
+</g>
+<g transform="translate(48,132)">
+<rect width="172" height="54" rx="9" fill="#171a21" stroke="#69db7c" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#e7e9ee">Graph entry</text>
+<text x="12" y="38" font-size="10" fill="#9aa1ae">input</text>
+</g>
+<g transform="translate(1348,216)">
+<rect width="172" height="54" rx="9" fill="#171a21" stroke="#ff8787" stroke-width="1.6"/>
+<text x="12" y="22" font-size="12" font-weight="600" fill="#e7e9ee">Graph result</text>
+<text x="12" y="38" font-size="10" fill="#9aa1ae">output</text>
+</g>
+<circle cx="52" cy="332" r="4" fill="#748ffc"/>
+<text x="62" y="336" font-size="10.5" fill="#9aa1ae">agent</text>
+<circle cx="105.0" cy="332" r="4" fill="#ffa94d"/>
+<text x="115.0" y="336" font-size="10.5" fill="#9aa1ae">condition</text>
+<circle cx="182.8" cy="332" r="4" fill="#69db7c"/>
+<text x="192.8" y="336" font-size="10.5" fill="#9aa1ae">input</text>
+<circle cx="235.8" cy="332" r="4" fill="#b197fc"/>
+<text x="245.8" y="336" font-size="10.5" fill="#9aa1ae">llm</text>
+<circle cx="276.40000000000003" cy="332" r="4" fill="#ff8787"/>
+<text x="286.40000000000003" y="336" font-size="10.5" fill="#9aa1ae">output</text>
+<circle cx="335.6" cy="332" r="4" fill="#38d9a9"/>
+<text x="345.6" y="336" font-size="10.5" fill="#9aa1ae">prompt</text>
+<circle cx="394.8" cy="332" r="4" fill="#3bc9db"/>
+<text x="404.8" y="336" font-size="10.5" fill="#9aa1ae">retriever</text>
+<circle cx="472.6" cy="332" r="4" fill="#74c0fc"/>
+<text x="482.6" y="336" font-size="10.5" fill="#9aa1ae">vector_store</text>
+</svg>

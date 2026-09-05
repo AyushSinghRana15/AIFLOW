@@ -24,6 +24,7 @@ from aiflow.svg import render_svg                # noqa: E402
 DOCS = ROOT / "docs"
 REFERENCE = ROOT / "examples" / "rag-support-agent.aiflow"
 SAMPLE = ROOT / "examples" / "sample-project"
+LANGGRAPH = ROOT / "examples" / "langgraph-project"
 
 
 def assets() -> dict[Path, str]:
@@ -32,15 +33,21 @@ def assets() -> dict[Path, str]:
 
     reference = Document.load(REFERENCE)
     extracted, _ = generate(SAMPLE)
-    # the analyzer records the host repo's commit; that would churn every push
-    extracted.project.commit = None
-    extracted.project.repository = None
+    framework, _ = generate(LANGGRAPH)
+
+    # The analyzer records the host repo's commit and remote; both would churn on
+    # every push and make the committed diagrams perpetually out of date.
+    for doc in (extracted, framework):
+        doc.project.commit = None
+        doc.project.repository = None
 
     for theme in ("light", "dark"):
         out[DOCS / f"workflow-{theme}.svg"] = render_svg(
             reference, theme=theme, orientation="horizontal")
         out[DOCS / f"generated-{theme}.svg"] = render_svg(
             extracted, theme=theme, orientation="horizontal")
+        out[DOCS / f"langgraph-{theme}.svg"] = render_svg(
+            framework, theme=theme, orientation="horizontal")
     return out
 
 

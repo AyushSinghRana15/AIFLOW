@@ -147,7 +147,7 @@ def suite_plugin(r: Results):
 def suite_project_files(r: Results):
     """The files that make this an open specification rather than one program."""
     for name in ("CONTRIBUTING.md", "CHANGELOG.md", "LICENSE",
-                 "docs/CONFORMANCE.md", "docs/ADAPTERS.md",
+                 "docs/CONFORMANCE.md", "docs/ADAPTERS.md", "docs/RELEASING.md",
                  ".pre-commit-hooks.yaml", "action.yml"):
         path = ROOT / name
         r.check(path.is_file() and path.stat().st_size > 200,
@@ -183,6 +183,27 @@ def suite_project_files(r: Results):
     spec = (ROOT / "spec" / "SPEC.md").read_text()
     r.check("## 10. Governance" in spec, "spec: governance is documented")
     r.check("| **1.1** |" in spec, "spec: the version table records 1.1")
+
+    # The README advertises a spec version; a stale badge misinforms every visitor.
+    readme = README.read_text()
+    badge = re.search(r"badge/spec-v([\d.]+)-", readme)
+    r.check(badge is not None, "readme: the spec badge is present")
+    if badge:
+        versions = re.findall(r"^\| \*\*(\d+\.\d+)\*\* \|", spec, re.M)
+        r.check(badge.group(1) == max(versions),
+                "readme: the spec badge matches the newest spec version",
+                f"badge {badge.group(1)}, spec {versions}")
+
+    # An unpublished package must not be advertised as pip-installable.
+    published = "not-published-marker"
+    if "pip install aiflow-format" in readme:
+        r.check("Not on PyPI yet" in readme or published in readme,
+                "readme: an unpublished package is not advertised as installable")
+
+    release = (ROOT / "docs" / "RELEASING.md").read_text()
+    r.check("docs/RELEASING.md" in readme, "readme: the release runbook is linked")
+    r.check("trusted publishing" in release.lower(),
+            "releasing: the runbook covers trusted publishing")
 
 
 def main() -> int:
