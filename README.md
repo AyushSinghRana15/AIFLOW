@@ -135,6 +135,30 @@ decorators and tool schema literals. Rules live in
 [`aiflow/analyze/signatures.py`](aiflow/analyze/signatures.py) as a table — adding a
 provider is a data edit.
 
+#### Framework adapters
+
+Generic analysis cannot see *topology* — `add_conditional_edges` means "branch here"
+only if you know LangGraph. When a framework is detected, its adapter runs and
+contributes what only it can:
+
+```
+$ aiflow generate examples/langgraph-project
+  analyzed 7 file(s) -> 12 nodes, 13 edges
+  agent=3, condition=1, input=1, llm=2, output=1, prompt=2, retriever=1, vector_store=1
+  adapter  langgraph -> aiflow-adapter-langgraph
+```
+
+Note the `condition=1`. **Adapters are the only component allowed to emit `condition`
+nodes and `routes_to` edges**, because they are the only one that does not have to
+guess — and they claim `framework_adapter` provenance to say so.
+
+| Framework | Status |
+|---|---|
+| LangGraph | ✅ |
+| LangChain · OpenAI Agents SDK · CrewAI · LlamaIndex | planned |
+
+Adding one is a self-contained job: see [`docs/ADAPTERS.md`](docs/ADAPTERS.md).
+
 ### `aiflow validate`
 
 ```bash
@@ -442,6 +466,7 @@ flowchart LR
 | [`aiflow/validate.py`](aiflow/validate.py) | L1 + L2 validation |
 | [`aiflow/graph.py`](aiflow/graph.py) | Traversal and behavioral queries |
 | [`aiflow/analyze/`](aiflow/analyze) | Python source → document |
+| [`aiflow/adapters/`](aiflow/adapters) | Framework-specific topology — see [ADAPTERS.md](docs/ADAPTERS.md) |
 | [`aiflow/semantic/`](aiflow/semantic) | Model-inferred semantics, with budget and cache |
 | [`aiflow/layout.py`](aiflow/layout.py) | Deterministic layered layout |
 | [`aiflow/render.py`](aiflow/render.py) · [`svg.py`](aiflow/svg.py) | Interactive page · static diagram |
@@ -493,7 +518,7 @@ pip install -e .
 python tests/run_all.py
 ```
 
-**806 assertions across six suites.**
+**850 assertions across seven suites.**
 
 | Suite | Covers |
 |---|---|
@@ -501,6 +526,7 @@ python tests/run_all.py
 | [`test_sdk.py`](tests/test_sdk.py) | Lossless round-tripping, graph queries, diff semantics, CLI exit codes |
 | [`test_render.py`](tests/test_render.py) | Layering (including cyclic workflows), determinism, SVG output, and that the page stays self-contained and escapes untrusted content |
 | [`test_analyze.py`](tests/test_analyze.py) | Every detection rule, cross-file linking, and that nothing generated carries invented `ai_context` |
+| [`test_adapters.py`](tests/test_adapters.py) | Every LangGraph construct, that non-literal wiring is reported rather than invented, and that a non-framework project is byte-identical with the adapter layer on or off |
 | [`test_semantic.py`](tests/test_semantic.py) | Budget, cache, and enrichment — entirely offline against a fake client, so the suite never spends a rate-limited quota |
 | [`test_docs.py`](tests/test_docs.py) | README links, anchors, generated diagrams, Mermaid syntax, and plugin manifests |
 
@@ -522,8 +548,8 @@ CI fails if they drift.
 | 4 | Interactive renderer | ✅ |
 | 5 | Python code analyzer | ✅ |
 | 6 | AI semantic analyzer | ✅ |
-| 7 | Framework adapters — LangGraph → LangChain → OpenAI Agents SDK → CrewAI → LlamaIndex | next |
-| 8 | AI-powered workflow exploration | |
+| 7 | Framework adapters — LangGraph ✅, others planned | ✅ |
+| 8 | AI-powered workflow exploration | next |
 | 9 | Git / developer integration | |
 | 10 | Ecosystem & open specification | |
 

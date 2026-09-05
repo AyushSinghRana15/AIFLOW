@@ -202,8 +202,15 @@ def suite_cli(r: Results):
         code, msg, _ = run_cli("generate", str(FIXTURE), "-o", str(out))
         r.eq(code, 0, "cli: generate succeeds on the fixture")
         r.check(out.is_file(), "cli: generate writes the document")
-        r.check("branching is not extracted" in msg,
+        r.check("no branching found" in msg,
                 "cli: generate states what static analysis could not see")
+
+        lg = ROOT / "examples" / "langgraph-project"
+        code, msg, _ = run_cli("generate", str(lg), "-o", str(tmp / "lg.aiflow"))
+        r.eq(code, 0, "cli: generate succeeds on a framework project")
+        r.check("adapter" in msg, "cli: the adapter that handled it is named")
+        r.check("no branching found" not in msg,
+                "cli: the branching caveat disappears once an adapter supplies it")
 
         code, _, err = run_cli("generate", str(FIXTURE), "-o", str(out))
         r.eq(code, 1, "cli: generate refuses to clobber")

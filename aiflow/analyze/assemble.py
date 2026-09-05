@@ -13,6 +13,8 @@ import re
 import subprocess
 from pathlib import Path
 
+from collections import defaultdict
+
 from ..model import (DataSource, Document, Edge, ModelDef, Node, Project,
                      Prompt, Provenance, SourceRef, ToolDef, Framework)
 from .python import Finding, FileReport, analyze_path
@@ -20,6 +22,19 @@ from .python import Finding, FileReport, analyze_path
 __all__ = ["assemble", "generate"]
 
 GENERATOR = {"name": "aiflow-analyzer-python", "version": "0.1.0"}
+
+
+def _adapter_index():
+    from .. import adapters as registry
+    return registry.ADAPTERS
+
+
+class _LazyIndex:
+    def __iter__(self):
+        return iter(_adapter_index())
+
+
+_ADAPTER_INDEX = _LazyIndex()
 
 LIMITS = ("Structure extracted from the syntax tree only. Workflows assembled "
           "at runtime from configuration, and any branching semantics, are not "
@@ -65,6 +80,18 @@ def _prov(f: Finding, note: str | None = None) -> Provenance:
                       evidence=[_src(f)], generator=dict(GENERATOR), notes=note)
 
 
+def _fw_prov(f: Finding, adapter: str, note: str | None = None) -> Provenance:
+    """Provenance for a claim only a framework adapter could make.
+
+    Distinct from `static_analysis` on purpose: a `routes_to` edge parsed from a
+    real `add_conditional_edges` call is a firmer claim about branching than
+    generic analysis can make, and a reader should be able to tell them apart.
+    """
+    return Provenance(method="framework_adapter", confidence=round(f.confidence, 2),
+                      evidence=[_src(f)], generator={"name": adapter, "version": "0.1.0"},
+                      notes=note)
+
+
 def _git_commit(root: Path) -> str | None:
     try:
         out = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"],
@@ -89,7 +116,8 @@ def _git_remote(root: Path) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-def assemble(reports: list[FileReport], root: Path, *, name: str | None = None) -> Document:
+def assemble(reports: list[FileReport], root: Path, *, name: str | None = None,
+             adapters: list | None = None) -> Document:
     findings: list[Finding] = [f for r in reports for f in r.findings]
     by_kind: dict[str, list[Finding]] = {}
     for f in findings:
@@ -217,14 +245,118 @@ def assemble(reports: list[FileReport], root: Path, *, name: str | None = None) 
             edge("retrieves", retriever_node[owner], store_node[store], f,
                  f"retrieval call on {f.data.get('receiver') or 'the store'}")
 
+    # -- topology contributed by a framework adapter ------------------------
+    adapter_findings: list[Finding] = []
+    adapter_names: list[str] = []
+    adapter_notes: list[str] = []
+    for result in (adapters or []):
+        adapter_findings.extend(result.findings)
+        adapter_notes.extend(result.notes)
+        if result.findings:
+            adapter_names.append(result.name)
+
+    fw: dict[str, list[Finding]] = defaultdict(list)
+    for f in adapter_findings:
+        fw[f.kind].append(f)
+
+    if fw["fw_node"]:
+        adapter = adapter_names[0] if adapter_names else "adapter"
+        # generic findings grouped by the function that contains them, so a graph
+        # step can claim the LLM call, prompt and retrieval inside its handler
+        by_function: dict[str, list[Finding]] = defaultdict(list)
+        for f in findings:
+            if f.scope:
+                by_function[f.scope.split(".")[0]].append(f)
+
+        step: dict[str, str] = {}
+        for f in fw["fw_node"]:
+            label = f.data["label"]
+            target = f.data.get("target") or label
+            owned = by_function.get(target, [])
+            has_llm = any(x.kind == "llm" for x in owned)
+            has_retrieval = any(x.kind == "retrieval" for x in owned)
+            node_type = "retriever" if has_retrieval and not has_llm else "agent"
+
+            nid = ids.mint("", label)
+            nodes.append(Node(id=nid, type=node_type, name=label,
+                              source=[_src(f)],
+                              provenance=_fw_prov(f, adapter,
+                                                  f"declared as a graph step handled by "
+                                                  f"{target!r}")))
+            step[label] = nid
+
+            for x in owned:
+                if x.kind == "llm" and x.key in llm_node:
+                    edge("calls", nid, llm_node[x.key], x,
+                         "LLM invocation inside the step handler")
+                    for pname in x.data.get("prompts", []):
+                        if pname in prompt_node:
+                            edge("uses", nid, prompt_node[pname], x,
+                                 "prompt referenced by the step handler")
+                if x.kind == "retrieval" and x.data.get("store") in store_node:
+                    edge("retrieves", nid, store_node[x.data["store"]], x,
+                         "retrieval call inside the step handler")
+
+        # branches: the thing generic analysis cannot see
+        for f in fw["fw_branch"]:
+            source_label = f.data["source"]
+            if source_label not in step:
+                continue
+            cid = ids.mint("cond_", f.data.get("router") or f"{source_label}_branch")
+            nodes.append(Node(id=cid, type="condition", name=f.data.get("router") or "branch",
+                              config={"router": f.data.get("router")} if f.data.get("router") else None,
+                              source=[_src(f)],
+                              provenance=_fw_prov(f, adapter, "declared via conditional edges")))
+            edges.append(Edge(id=ids.mint("e_", f"{source_label}_to_{cid}"), type="passes",
+                              source=step[source_label], target=cid,
+                              provenance=_fw_prov(f, adapter)))
+            for when, target_label in f.data.get("mapping", {}).items():
+                if target_label in step:
+                    edges.append(Edge(
+                        id=ids.mint("e_", f"{cid}_{when}"), type="routes_to",
+                        source=cid, target=step[target_label], when=f"route == {when!r}",
+                        label=when, provenance=_fw_prov(f, adapter)))
+            if f.data.get("partial"):
+                nodes[-1].description = ("Some branch targets were not literal and are "
+                                         "missing from this graph.")
+
+        branch_sources = {f.data["source"] for f in fw["fw_branch"]}
+        for f in fw["fw_edge"]:
+            src, tgt = f.data["source"], f.data["target"]
+            if src in step and tgt in step:
+                edge("passes", step[src], step[tgt], f, "sequential graph edge")
+
+        for f in fw["fw_entry"]:
+            label = f.data["label"]
+            if label not in step:
+                continue
+            in_id = ids.mint("in_", f"{label}_entry")
+            nodes.append(Node(id=in_id, type="input", name="Graph entry",
+                              source=[_src(f)], provenance=_fw_prov(f, adapter)))
+            edge("passes", in_id, step[label], f, "graph entry point")
+
+        for f in fw["fw_terminal"]:
+            label = f.data["label"]
+            if label not in step:
+                continue
+            out_id = ids.mint("out_", f"{label}_result")
+            nodes.append(Node(id=out_id, type="output", name="Graph result",
+                              source=[_src(f)], provenance=_fw_prov(f, adapter)))
+            edges.append(Edge(id=ids.mint("e_", f"{label}_produces"), type="produces",
+                              source=step[label], target=out_id,
+                              provenance=_fw_prov(f, adapter)))
+
     # -- entrypoints: input, dataflow between components, output ------------
+    # Skipped when an adapter already supplied the topology: the adapter parsed
+    # the graph the framework actually builds, so inferring a second one from
+    # call order would contradict it.
     instances = {f.name: f.data["class"] for f in by_kind.get("instance", [])}
 
     def component_for(receiver: str) -> str | None:
         cls = instances.get(receiver, receiver)
         return agent_node.get(cls) or retriever_node.get(cls)
 
-    for f in by_kind.get("entrypoint", []):
+    for f in ([] if fw["fw_node"] else by_kind.get("entrypoint", [])):
         flow = [s for s in f.data.get("flow", []) if component_for(s["receiver"])]
         if not flow:
             continue
@@ -255,13 +387,16 @@ def assemble(reports: list[FileReport], root: Path, *, name: str | None = None) 
     frameworks = {}
     for r in reports:
         frameworks.update(r.frameworks)
+    handled = {a.framework: a.name for result in (adapters or [])
+               for a in _ADAPTER_INDEX if a.name == result.name and result.findings}
     project = Project(
         name=name or root.resolve().name, root=".", languages=["python"],
         commit=_git_commit(root), repository=_git_remote(root),
-        frameworks=[Framework(name=k) for k in sorted(frameworks)] or None,
+        frameworks=[Framework(name=k, adapter=handled.get(k))
+                    for k in sorted(frameworks)] or None,
     )
 
-    notes = [n for r in reports for n in r.notes]
+    notes = [n for r in reports for n in r.notes] + adapter_notes
     return Document(
         format="aiflow", version="1.0", project=project,
         nodes=nodes, edges=edges,
@@ -275,7 +410,13 @@ def assemble(reports: list[FileReport], root: Path, *, name: str | None = None) 
     )
 
 
-def generate(path: str | Path, *, name: str | None = None) -> tuple[Document, list[FileReport]]:
+def generate(path: str | Path, *, name: str | None = None,
+             use_adapters: bool = True) -> tuple[Document, list[FileReport]]:
+    """Analyze a project, then let any applicable framework adapter refine it."""
     root = Path(path)
     reports = analyze_path(root)
-    return assemble(reports, root, name=name), reports
+    results = []
+    if use_adapters:
+        from .. import adapters as adapter_registry
+        results = adapter_registry.run(root, reports)
+    return assemble(reports, root, name=name, adapters=results), reports

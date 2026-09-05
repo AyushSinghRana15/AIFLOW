@@ -253,6 +253,14 @@ def cmd_generate(args) -> int:
           f"{len(doc.edges)} edges")
     print("  " + ", ".join(f"{k}={v}" for k, v in sorted(counts.items())))
 
+    used = [f for f in (doc.project.frameworks or []) if f.adapter]
+    for framework in used:
+        print(f"  adapter  {framework.name} -> {framework.adapter}")
+    unhandled = [f.name for f in (doc.project.frameworks or []) if not f.adapter]
+    if unhandled:
+        print(f"  {_paint('note', DIM)} no adapter for "
+              f"{', '.join(unhandled)}; only generic analysis was applied")
+
     if report.errors:
         print(f"\n  {len(report.errors)} validation error(s):", file=sys.stderr)
         for f in report.errors[:5]:
@@ -260,6 +268,8 @@ def cmd_generate(args) -> int:
         return 1
     for f in report.warnings:
         print(f"  {_paint('warning', YELLOW)} {f.code} {f.message}")
+    for note in (doc.metadata or {}).get("skipped") or ():
+        print(f"  {_paint('skipped', DIM)} {note}")
 
     # Say plainly what static analysis could not see, rather than letting an
     # incomplete graph read as a complete one.
@@ -268,8 +278,8 @@ def cmd_generate(args) -> int:
               f"declared start. Add one by hand, or point --path at the module "
               f"that receives requests.")
     if not any(n.type == "condition" for n in doc.nodes):
-        print(f"  {_paint('note', DIM)} branching is not extracted by static "
-              f"analysis; add condition nodes by hand where the workflow routes.")
+        print(f"  {_paint('note', DIM)} no branching found. Generic analysis does "
+              f"not extract it; a framework adapter does, where one applies.")
     return 0
 
 

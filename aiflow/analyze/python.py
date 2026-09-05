@@ -99,14 +99,17 @@ def _provider_for_model(model: str) -> str | None:
 
 class _Walker(ast.NodeVisitor):
     def __init__(self, report: FileReport, module: str,
-                 known_stores: dict[str, str] | None = None):
+                 known_stores: dict[str, str] | None = None,
+                 known_prompts: set[str] | None = None):
         self.r = report
         self.module = module
         self.stack: list[str] = []          # enclosing class/function names
         self.class_stack: list[str] = []    # enclosing class names only
         self.class_has_llm: dict[str, list[Finding]] = {}
         self.class_has_retrieval: dict[str, list[Finding]] = {}
-        self.prompt_names: set[str] = set()
+        # Prompt constants defined anywhere in the project, so a handler that
+        # imports one is still credited with using it.
+        self.prompt_names: set[str] = set(known_prompts or ())
         # Variable -> vector_store key. Seeded with stores found elsewhere in the
         # project so a retrieval call can be linked to a store defined in another
         # module; a same-file definition overwrites the seed.
@@ -440,7 +443,8 @@ def _literal(node) -> object:
 
 # ---------------------------------------------------------------------------
 def analyze_source(source: str, path: str, module: str | None = None,
-                   known_stores: dict[str, str] | None = None) -> FileReport:
+                   known_stores: dict[str, str] | None = None,
+                   known_prompts: set[str] | None = None) -> FileReport:
     report = FileReport(path=path)
     try:
         tree = ast.parse(source, filename=path)
@@ -448,7 +452,7 @@ def analyze_source(source: str, path: str, module: str | None = None,
         report.notes.append(f"{path}: skipped, syntax error at line {exc.lineno}")
         return report
     module = module or Path(path).with_suffix("").as_posix().replace("/", ".")
-    _Walker(report, module, known_stores).visit(tree)
+    _Walker(report, module, known_stores, known_prompts).visit(tree)
     return report
 
 
@@ -462,12 +466,12 @@ def iter_python_files(root: Path):
 def analyze_path(root: str | Path) -> list[FileReport]:
     """Analyze a file or a project tree.
 
-    A project is walked twice: the first pass finds vector stores, the second
-    re-analyzes with those names in scope so a retrieval call can be linked to a
-    store its module merely imports. Names are matched bare, so two stores
-    sharing a variable name in different modules resolve to whichever the second
-    pass sees last -- the resulting edge carries the rule's confidence, not
-    certainty.
+    A project is walked twice: the first pass finds vector stores and prompt
+    constants, the second re-analyzes with those names in scope so a call can be
+    linked to a store or prompt its module merely imports. Names are matched
+    bare, so two definitions sharing a name in different modules resolve to
+    whichever the second pass sees last -- the resulting edge carries the rule's
+    confidence, not certainty.
     """
     root = Path(root)
     if root.is_file():
@@ -484,12 +488,15 @@ def analyze_path(root: str | Path) -> list[FileReport]:
             _UNREADABLE[rel] = str(exc)
 
     known: dict[str, str] = {}
+    prompts: set[str] = set()
     for rel, module, text in sources:
         if text is None:
             continue
         for f in analyze_source(text, rel, module).findings:
             if f.kind == "vector_store":
                 known[f.name] = f.key
+            elif f.kind == "prompt":
+                prompts.add(f.name)
 
     reports = []
     for rel, module, text in sources:
@@ -497,7 +504,8 @@ def analyze_path(root: str | Path) -> list[FileReport]:
             reports.append(FileReport(path=rel,
                                       notes=[f"{rel}: unreadable ({_UNREADABLE[rel]})"]))
             continue
-        reports.append(analyze_source(text, rel, module, known_stores=known))
+        reports.append(analyze_source(text, rel, module, known_stores=known,
+                                      known_prompts=prompts))
     return reports
 
 
