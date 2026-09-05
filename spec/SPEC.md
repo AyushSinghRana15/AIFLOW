@@ -101,7 +101,9 @@ ignore keys they do not understand.
 
 `metadata.layout` holds optional visual hints. **The semantic model is authoritative;
 layout is presentation and MAY be discarded** — this is the boundary that keeps
-AIFLOW from degenerating into a diagram format.
+AIFLOW from degenerating into a diagram format. The reference renderer honours this:
+it computes layout from the graph at render time and never reads or writes
+coordinates in the document.
 
 ## 8. Validation levels
 

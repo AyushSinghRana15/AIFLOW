@@ -229,10 +229,9 @@ def suite_cli(r: Results):
     r.check("UNHANDLED" in out or "unhandled" in out.lower(),
             "cli: node detail flags its unhandled failure")
 
-    for cmd in ("generate", "render"):
-        code, _, err = run_cli(cmd, ".")
-        r.eq(code, 2, f"cli: {cmd} exits 2 rather than pretending to work")
-        r.check("not implemented" in err, f"cli: {cmd} says so plainly")
+    code, _, err = run_cli("generate", ".")
+    r.eq(code, 2, "cli: generate exits 2 rather than pretending to work")
+    r.check("not implemented" in err, "cli: generate says so plainly")
 
 
 def suite_spec(r: Results):

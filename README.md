@@ -47,7 +47,7 @@ a model reasoning about failure paths cannot.
 | [`spec/aiflow-v1.schema.json`](spec/aiflow-v1.schema.json) | JSON Schema (draft 2020-12) — structural validation |
 | [`spec/edge-compatibility.json`](spec/edge-compatibility.json) | Normative edge/node type matrix — machine-readable |
 | [`examples/rag-support-agent.aiflow`](examples/rag-support-agent.aiflow) | Reference document exercising every node and edge type |
-| [`aiflow/`](aiflow) | Python SDK and CLI — model, validator, graph queries, diff |
+| [`aiflow/`](aiflow) | Python SDK and CLI — model, validator, graph queries, diff, renderer |
 | [`tests/`](tests) | Conformance suites |
 
 ## Install
@@ -61,9 +61,26 @@ pip install -e .
 ```bash
 aiflow validate examples/rag-support-agent.aiflow --strict
 aiflow inspect examples/rag-support-agent.aiflow --paths --unhandled
+aiflow render examples/rag-support-agent.aiflow --open
 aiflow init -o project.aiflow
 aiflow diff old.aiflow new.aiflow
 ```
+
+## Render
+
+```bash
+aiflow render project.aiflow -o workflow.html
+```
+
+One self-contained HTML file — no CDN, no build step, no server. It opens from a
+`file://` path or a CI artifact. The page gives you a pan/zoom graph laid out by
+edge semantics, a searchable component explorer, per-node detail with **clickable
+source permalinks pinned to the commit**, filter chips per edge type, and path
+highlighting from input to output. Nodes carrying an unhandled failure or an
+AI-inferred claim are flagged in the graph itself.
+
+Layout is computed at render time, never stored in the document — the spec treats
+layout as presentation and the semantic model as authoritative.
 
 `aiflow inspect` answers behavioral questions directly against the graph:
 
@@ -118,11 +135,13 @@ print(g.low_trust())
 python3 tests/run_all.py
 ```
 
-606 assertions across two suites. The matrix suite sweeps all 486
+640 assertions across three suites. The matrix suite sweeps all 486
 `edge_type × source_type × target_type` combinations against the compatibility
 matrix in both directions, and runs 25 targeted mutations each expected to raise a
 specific diagnostic. The SDK suite covers lossless round-tripping, graph queries,
-diff semantics, and CLI exit codes.
+diff semantics, and CLI exit codes. The render suite covers layering (including
+cyclic workflows), determinism, and that the page stays self-contained and escapes
+untrusted document content.
 
 ## Two things that make this different
 
@@ -155,8 +174,8 @@ A document is conformant only when it passes both. Diagnostic codes are listed i
 | 1 | AIFLOW specification | ✅ |
 | 2 | JSON Schema | ✅ |
 | 3 | Python SDK | ✅ |
-| 4 | Interactive renderer | next |
-| 5 | Python code analyzer | |
+| 4 | Interactive renderer | ✅ |
+| 5 | Python code analyzer | next |
 | 6 | AI semantic analyzer | |
 | 7 | Framework adapters — LangGraph → LangChain → OpenAI Agents SDK → CrewAI → LlamaIndex | |
 | 8 | AI-powered workflow exploration | |
@@ -171,10 +190,10 @@ A document is conformant only when it passes both. Diagnostic codes are listed i
 | `aiflow validate` | ✅ |
 | `aiflow inspect` | ✅ |
 | `aiflow diff` | ✅ |
-| `aiflow render` | phase 4 — exits 2 |
+| `aiflow render` | ✅ |
 | `aiflow generate` | phases 5–7 — exits 2 |
 
-Unimplemented subcommands exit 2 with an explanation rather than pretending to work.
+`generate` exits 2 with an explanation rather than pretending to work.
 
 ## v1 success criteria
 

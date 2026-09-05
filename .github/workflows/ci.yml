@@ -71,3 +71,13 @@ jobs:
           aiflow init -o /tmp/demo.aiflow --name demo
           aiflow validate /tmp/demo.aiflow --strict
           aiflow inspect /tmp/demo.aiflow --json > /dev/null
+          aiflow render /tmp/demo.aiflow -o /tmp/demo.html
+          # the page must not reference anything it would have to fetch at view time
+          python - <<'PY'
+          import re
+          html = open("/tmp/demo.html").read()
+          external = [u for u in re.findall(r'(?:src|href)\s*=\s*["\']([^"\']+)', html)
+                      if u.startswith(("http://", "https://", "//"))]
+          assert not external, external
+          print(f"self-contained page: {len(html)} bytes, 0 external references")
+          PY

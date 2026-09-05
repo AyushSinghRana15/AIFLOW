@@ -10,6 +10,7 @@ from . import __version__
 from .diff import diff as diff_docs
 from .graph import Graph
 from .model import Document
+from .render import render_to_file
 from .validate import validate, validate_file
 
 BOLD, DIM, RED, YELLOW, GREEN, RESET = (
@@ -222,6 +223,26 @@ def cmd_diff(args) -> int:
     return 1 if (result and args.exit_code) else 0
 
 
+def cmd_render(args) -> int:
+    doc = Document.load(args.file)
+    report = validate(doc.to_dict())
+    if report.errors and not args.force:
+        print(f"{args.file} has {len(report.errors)} validation error(s); "
+              f"rendering an invalid document would misrepresent it.\n"
+              f"Fix them, or pass --force to render anyway.", file=sys.stderr)
+        for f in report.errors[:5]:
+            print(f"  {f}", file=sys.stderr)
+        return 1
+
+    out = args.output or Path(args.file).with_suffix(".html")
+    render_to_file(doc, out, orientation=args.orientation)
+    print(f"wrote {out}")
+    if args.open:
+        import webbrowser
+        webbrowser.open(Path(out).resolve().as_uri())
+    return 0
+
+
 def cmd_unimplemented(args) -> int:
     print(f"'aiflow {args.command}' is not implemented yet.\n"
           f"It lands in a later phase of the roadmap; see README.md.", file=sys.stderr)
@@ -268,11 +289,18 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Exit 1 when the documents differ.")
     d.set_defaults(func=cmd_diff)
 
-    for name, helptext in (("generate", "Extract a .aiflow from a project (phase 5-7)."),
-                           ("render", "Render a .aiflow to an interactive graph (phase 4).")):
-        s = sub.add_parser(name, help=helptext)
-        s.add_argument("args", nargs="*")
-        s.set_defaults(func=cmd_unimplemented)
+    r = sub.add_parser("render", help="Render a workflow to a self-contained HTML page.")
+    r.add_argument("file", type=Path)
+    r.add_argument("-o", "--output", type=Path,
+                   help="Output path (defaults to the input with a .html suffix).")
+    r.add_argument("--orientation", choices=["horizontal", "vertical"], default="horizontal")
+    r.add_argument("--open", action="store_true", help="Open the result in a browser.")
+    r.add_argument("--force", action="store_true", help="Render even if validation fails.")
+    r.set_defaults(func=cmd_render)
+
+    gen = sub.add_parser("generate", help="Extract a .aiflow from a project (phase 5-7).")
+    gen.add_argument("args", nargs="*")
+    gen.set_defaults(func=cmd_unimplemented)
 
     return p
 

@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-SUITES = ["test_matrix.py", "test_sdk.py"]
+SUITES = ["test_matrix.py", "test_sdk.py", "test_render.py"]
 
 failed = []
 for suite in SUITES:
