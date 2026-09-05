@@ -241,24 +241,24 @@ AIFLOW = Nodes + Semantic Edges + Registries + Metadata + Provenance
 
 ```mermaid
 flowchart TB
-    subgraph graph["Graph — occurrences"]
+    subgraph occurrences["Graph — occurrences"]
         direction LR
         N["<b>Nodes</b><br/>agent · llm · tool · prompt<br/>retriever · vector_store<br/>input · output · condition"]
         E["<b>Edges</b><br/>calls · uses · retrieves<br/>passes · produces · routes_to"]
         N -.-> E
     end
-    subgraph reg["Registries — definitions, declared once"]
+    subgraph registries["Registries — definitions, declared once"]
         direction LR
         R["prompts · models · tools · data_sources"]
     end
-    subgraph meta["Every element carries"]
+    subgraph carried["Every element carries"]
         direction LR
         P["<b>provenance</b><br/>how this was learned<br/>+ confidence"]
         S["<b>source</b><br/>file · lines · symbol<br/>+ commit"]
     end
-    graph --> reg
-    graph --> meta
-    reg --> meta
+    occurrences --> registries
+    occurrences --> carried
+    registries --> carried
 ```
 
 **Nodes are positions in the graph. Registries hold reusable definitions.** A prompt
