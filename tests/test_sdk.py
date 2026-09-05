@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import shutil
 import sys
 import tempfile
 from contextlib import redirect_stderr, redirect_stdout
@@ -14,6 +15,7 @@ sys.path.insert(0, str(ROOT))
 
 import aiflow  # noqa: E402
 from aiflow import Document, Graph, diff  # noqa: E402
+from aiflow.diff import Change, normalize  # noqa: E402
 from aiflow.cli import main as cli_main  # noqa: E402
 
 GOLDEN_PATH = ROOT / "examples" / "rag-support-agent.aiflow"
@@ -33,8 +35,8 @@ class Results:
         else:
             self.failures.append(f"{label}{(' — ' + str(detail)) if detail else ''}")
 
-    def eq(self, got, want, label):
-        self.check(got == want, label, f"got {got!r}, want {want!r}")
+    def eq(self, got, want, label, detail=None):
+        self.check(got == want, label, detail or f"got {got!r}, want {want!r}")
 
 
 def run_cli(*argv) -> tuple[int, str, str]:
@@ -240,11 +242,102 @@ def suite_spec(r: Results):
             "spec: the public surface is exported")
 
 
+def suite_drift(r: Results):
+    """Comparing a document against the source it came from."""
+    doc = Document.load(GOLDEN_PATH)
+    clean = normalize(doc)
+
+    r.check(clean.project.commit is None, "normalize: the commit is dropped")
+    r.check(clean.project.repository is None, "normalize: the repository is dropped")
+    r.check("generated_at" not in (clean.metadata or {}),
+            "normalize: the generation timestamp is dropped")
+
+    ref = clean.node("retr_kb").source[0]
+    r.check(ref.start_line is None and ref.end_line is None,
+            "normalize: line numbers are dropped, because inserting a line above "
+            "a component is not a change to the workflow")
+    r.check(ref.file and ref.symbol,
+            "normalize: the file and symbol are kept, so a component moving is "
+            "still a change")
+
+    # Edge.source is a node id, not a source ref; normalising must not touch it
+    r.eq(clean.edge("e_docs_to_answerer").source, "retr_kb",
+         "normalize: an edge's source node id survives intact")
+
+    r.check(not diff(normalize(Document.load(GOLDEN_PATH)), clean),
+            "normalize: normalising is deterministic")
+
+    # a real change survives normalisation
+    changed = Document.load(GOLDEN_PATH)
+    changed.nodes[0].source[0].file = "somewhere/else.py"
+    r.check(diff(clean, normalize(changed)),
+            "normalize: a component moving file is still reported")
+
+    r.eq(Change("document", "modified", "x").noun, "document",
+         "diff: an already-singular kind is not truncated")
+    r.eq(Change("nodes", "modified", "x").noun, "node", "diff: plurals are singularised")
+
+    long_value = {"a" * 200: "b" * 200}
+    rendered = str(Change("nodes", "modified", "x", "field", long_value, 1))
+    r.check(len(max(rendered.splitlines(), key=len)) < 200,
+            "diff: a long value is truncated so the output stays readable")
+
+
+def suite_git_cli(r: Results):
+    sample = ROOT / "examples" / "langgraph-project"
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        doc = tmp / "wf.aiflow"
+        r.eq(run_cli("generate", str(sample), "-o", str(doc))[0], 0,
+             "git-cli: a document is generated to compare against")
+
+        code, out, _ = run_cli("diff", "--against", str(sample), str(doc), "--exit-code")
+        r.eq(code, 0, "git-cli: a current document reports no drift")
+        r.check("matches what the source produces" in out,
+                "git-cli: and says so in those terms")
+
+        # change the source, not the document
+        modified = tmp / "src"
+        shutil.copytree(sample, modified)
+        graph_py = modified / "app" / "graph.py"
+        graph_py.write_text(graph_py.read_text().replace(
+            '"direct": "answer",', '"direct": "answer",\n        "escalate": "lookup",'))
+
+        code, out, _ = run_cli("diff", "--against", str(modified), str(doc), "--exit-code")
+        r.eq(code, 1, "git-cli: drift exits non-zero, so it works as a CI gate")
+        r.check("added" in out and "escalate" in out,
+                "git-cli: the added branch is the reported change", out[:200])
+        r.check("aiflow generate" in out, "git-cli: the fix is spelled out")
+
+        # line shifts alone are not drift
+        untouched = tmp / "shifted"
+        shutil.copytree(sample, untouched)
+        nodes_py = untouched / "app" / "nodes.py"
+        nodes_py.write_text("# a new comment line\n" + nodes_py.read_text())
+        code, out, _ = run_cli("diff", "--against", str(untouched), str(doc), "--exit-code")
+        r.eq(code, 0, "git-cli: inserting a comment line is not drift", out[:300])
+
+        code, _, err = run_cli("diff", str(doc))
+        r.eq(code, 1, "git-cli: diff with one document and no flag is an error")
+        r.check("--base/--against" in err, "git-cli: and names the flags")
+
+        code, _, err = run_cli("diff", "--base", "HEAD", str(tmp / "nope.aiflow"))
+        r.eq(code, 1, "git-cli: a missing document exits non-zero")
+
+    readme = ROOT / "README.md"
+    code, _, err = run_cli("diff", "--base", "HEAD", str(readme))
+    r.eq(code, 1, "git-cli: a non-document is refused")
+    r.check("not a valid .aiflow document" in err,
+            "git-cli: with a clear message rather than a traceback", err[:120])
+
+
 # ---------------------------------------------------------------------------
 def main() -> int:
     r = Results()
     for name, suite in (("model", suite_model), ("graph", suite_graph),
-                        ("diff", suite_diff), ("cli", suite_cli), ("spec", suite_spec)):
+                        ("diff", suite_diff), ("drift", suite_drift),
+                        ("git-cli", suite_git_cli),
+                        ("cli", suite_cli), ("spec", suite_spec)):
         print(f"\n{name}")
         suite(r)
 

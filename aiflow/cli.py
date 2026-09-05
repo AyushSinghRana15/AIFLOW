@@ -4,12 +4,14 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 from . import __version__
 from .diff import diff as diff_docs
+from .diff import normalize
 from .graph import Graph
 from .model import Document
 from .render import render_to_file
@@ -213,18 +215,84 @@ def cmd_init(args) -> int:
     return 0
 
 
+def _from_git(path: Path, ref: str) -> Document:
+    """Read a document as it was at a git ref."""
+    repo = path.resolve().parent
+    try:
+        top = subprocess.run(["git", "-C", str(repo), "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True, timeout=10)
+        if top.returncode != 0:
+            raise FileNotFoundError(f"{path} is not inside a git repository")
+        root = Path(top.stdout.strip())
+        rel = path.resolve().relative_to(root).as_posix()
+        show = subprocess.run(["git", "-C", str(root), "show", f"{ref}:{rel}"],
+                              capture_output=True, text=True, timeout=20)
+        if show.returncode != 0:
+            raise FileNotFoundError(
+                f"{rel} does not exist at {ref}: {show.stderr.strip()}")
+        try:
+            return Document.from_json(show.stdout)
+        except ValueError as exc:
+            raise FileNotFoundError(
+                f"{rel} at {ref} is not a valid .aiflow document: {exc}") from None
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise FileNotFoundError(f"git failed: {exc}") from None
+
+
 def cmd_diff(args) -> int:
-    result = diff_docs(Document.load(args.old), Document.load(args.new))
+    new_path = args.old if args.new is None else args.new
+
+    try:
+        if args.base:
+            # compare a document against its own past
+            try:
+                new = Document.load(new_path)
+            except ValueError as exc:
+                print(f"{new_path} is not a valid .aiflow document: {exc}", file=sys.stderr)
+                return 1
+            old = _from_git(Path(new_path), args.base)
+        elif args.against:
+            # compare a committed document against what the source produces now
+            from .analyze import generate
+            new = Document.load(new_path)
+            # Regenerate under the document's own project name: the analyzer
+            # defaults to the directory name, and a checkout in a differently
+            # named folder is not a change to the workflow.
+            existing = new.project.name if new.project else None
+            old, _ = generate(args.against, name=existing)
+            old, new = normalize(old), normalize(new)
+        else:
+            if args.new is None:
+                print("diff needs two documents, or --base/--against with one",
+                      file=sys.stderr)
+                return 1
+            old, new = Document.load(args.old), Document.load(args.new)
+    except FileNotFoundError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    if args.against:
+        # the regenerated document is the "before" only in argument order; report
+        # it as the source of truth drifting from the committed file
+        result = diff_docs(new, old)
+    else:
+        result = diff_docs(old, new)
     if args.json:
         print(json.dumps({"changed": bool(result),
                           "summary": result.summary(),
                           "changes": [c.__dict__ for c in result.changes]}, indent=2))
     elif not result:
-        print("no semantic changes")
+        print("no semantic changes"
+              if not args.against else
+              "the committed document matches what the source produces")
     else:
         for c in result.changes:
             print(c)
         print(f"\n{len(result.changes)} change(s)")
+        if args.against:
+            print(f"\n{_paint('drift', YELLOW)} the committed document no longer "
+                  f"matches the source. Regenerate it:\n"
+                  f"  aiflow generate {args.against} -o {new_path} --force")
     return 1 if (result and args.exit_code) else 0
 
 
@@ -502,7 +570,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     d = sub.add_parser("diff", help="Semantic diff between two documents.")
     d.add_argument("old", type=Path)
-    d.add_argument("new", type=Path)
+    d.add_argument("new", nargs="?", type=Path)
+    d.add_argument("--base", metavar="REF",
+                   help="Compare the given document against its content at a git ref.")
+    d.add_argument("--against", metavar="PROJECT", type=Path,
+                   help="Regenerate from a source tree and report drift from the document.")
     d.add_argument("--json", action="store_true")
     d.add_argument("--exit-code", action="store_true",
                    help="Exit 1 when the documents differ.")

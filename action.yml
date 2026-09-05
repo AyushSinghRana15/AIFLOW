@@ -1,0 +1,62 @@
+name: AIFLOW
+description: Validate .aiflow workflow documents, and check they still match their source.
+author: Ayush Singh
+
+branding:
+  icon: git-branch
+  color: purple
+
+inputs:
+  document:
+    description: Path to the .aiflow document to check.
+    required: false
+    default: project.aiflow
+  project:
+    description: >
+      Source tree to regenerate from. When set, the action fails if the committed
+      document no longer matches what the source produces.
+    required: false
+  strict:
+    description: Treat validation warnings as errors.
+    required: false
+    default: "true"
+  python-version:
+    description: Python version to run on.
+    required: false
+    default: "3.12"
+
+outputs:
+  changes:
+    description: Number of drift changes found (0 when the document is current).
+    value: ${{ steps.drift.outputs.changes }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install AIFLOW
+      shell: bash
+      run: python -m pip install --quiet aiflow-format
+
+    - name: Validate
+      shell: bash
+      run: |
+        aiflow validate "${{ inputs.document }}" \
+          ${{ inputs.strict == 'true' && '--strict' || '' }}
+
+    - name: Check for drift from source
+      id: drift
+      if: inputs.project != ''
+      shell: bash
+      run: |
+        set +e
+        output=$(aiflow diff --against "${{ inputs.project }}" "${{ inputs.document }}" --exit-code)
+        status=$?
+        set -e
+        echo "$output"
+        count=$(printf '%s' "$output" | grep -Eo '^[0-9]+ change' | cut -d' ' -f1 || echo 0)
+        echo "changes=${count:-0}" >> "$GITHUB_OUTPUT"
+        exit $status

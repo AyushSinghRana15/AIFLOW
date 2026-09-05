@@ -353,7 +353,54 @@ modified prompt      p_answer
 
 Comparison is by **id**, not position, so reordering an array is not a change. Because
 reusable components live in registries, editing one prompt reports as a single change
-no matter how many nodes reference it. `--exit-code` makes it usable as a CI gate.
+no matter how many nodes reference it. `--exit-code` makes it usable as a CI gate — see
+[Keeping it honest in CI](#keeping-it-honest-in-ci).
+
+### Keeping it honest in CI
+
+A `.aiflow` document committed next to the code is only useful while it still
+matches the code. Two flags make that checkable:
+
+```bash
+aiflow diff --against ./src project.aiflow --exit-code   # has the source moved on?
+aiflow diff --base HEAD~1 project.aiflow                 # what changed since the last commit?
+```
+
+```
+$ aiflow diff --against ./src project.aiflow --exit-code
+added    edge        e_cond_route_question_escalate
+
+1 change(s)
+
+drift the committed document no longer matches the source. Regenerate it:
+  aiflow generate ./src -o project.aiflow --force
+```
+
+Drift comparison deliberately ignores what is not a change to the workflow: commit
+hashes, timestamps, the directory the checkout happens to live in, and **line
+numbers** — inserting one comment at the top of a file must not report a dozen
+changes. A component moving to a different file or symbol still does.
+
+**GitHub Action:**
+
+```yaml
+- uses: AyushSinghRana15/AIFLOW@main
+  with:
+    document: project.aiflow
+    project: ./src        # omit to validate only
+```
+
+**pre-commit:**
+
+```yaml
+repos:
+  - repo: https://github.com/AyushSinghRana15/AIFLOW
+    rev: v0.1.0
+    hooks:
+      - id: aiflow-validate
+      - id: aiflow-drift
+        args: [--against, ./src]
+```
 
 ### `aiflow init`
 
@@ -557,7 +604,7 @@ pip install -e .
 python tests/run_all.py
 ```
 
-**911 assertions across seven suites.**
+**934 assertions across seven suites.**
 
 | Suite | Covers |
 |---|---|
@@ -590,7 +637,7 @@ CI fails if they drift.
 | 7 | Framework adapters — LangGraph ✅, others planned | ✅ |
 | 8 | AI-powered workflow exploration | ✅ |
 | 9 | Git / developer integration | next |
-| 10 | Ecosystem & open specification | |
+| 10 | Ecosystem & open specification | next |
 
 Phase 6 is the first component permitted to emit `ai_inference` — which is what the
 provenance model was built for, and building it surfaced the one spec change so far:

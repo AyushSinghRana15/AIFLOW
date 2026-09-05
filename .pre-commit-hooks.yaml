@@ -1,0 +1,26 @@
+# Hooks provided by this repository, for use with https://pre-commit.com
+#
+#   repos:
+#     - repo: https://github.com/AyushSinghRana15/AIFLOW
+#       rev: v0.1.0
+#       hooks:
+#         - id: aiflow-validate
+#         - id: aiflow-drift
+#           args: [--against, ./src]
+
+- id: aiflow-validate
+  name: Validate .aiflow documents
+  description: Structural and semantic validation of every changed .aiflow file.
+  entry: aiflow validate --strict
+  language: python
+  files: \.aiflow$
+
+- id: aiflow-drift
+  name: Check .aiflow documents against their source
+  description: >
+    Regenerate the workflow from source and fail if the committed document no
+    longer matches it. Pass the project directory with --against.
+  entry: aiflow diff --exit-code
+  language: python
+  files: \.aiflow$
+  pass_filenames: true
